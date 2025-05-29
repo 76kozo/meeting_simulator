@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多機関連携会議シミュレーション</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>多機関連携会議シミュレーション</h1>
+    </header>
+    <div class="input-container">
+        <h2>シミュレーション情報入力</h2>
+        <form id="simulation-form">
+            <div class="form-group">
+                <label for="basic-info">対象者の基本情報:</label>
+                <textarea id="basic-info" name="basic-info" rows="6" required></textarea> <!-- rowsを4から6へ変更 -->
+            </div>
+            <div class="form-group">
+                <label for="assessment-summary">アセスメント結果概要:</label>
+                <textarea id="assessment-summary" name="assessment-summary" rows="6" required></textarea> <!-- rowsを5から6へ変更 -->
+            </div>
+            <div class="form-group">
+                <label for="observation-points">就労選択支援事業での観察ポイント:</label>
+                <textarea id="observation-points" name="observation-points" rows="5"></textarea> <!-- rowsを4から5へ変更 -->
+            </div>
+            <div class="form-group">
+                <label for="participants">多機関連携会議の参加者 (役割と共に、改行区切りで入力):</label>
+                <textarea id="participants" name="participants" rows="6" required></textarea> <!-- rowsを5から6へ変更 -->
+                <small>例: 田中（就労選択支援員・進行役）</small>
+            </div>
+            <button type="submit">シミュレーション開始</button>
+        </form>
+        <div id="loading-indicator" style="display: none; text-align: center; margin-top: 15px;">
+            <p>シミュレーション生成中...</p>
+            <!-- ここにスピナーなどを追加しても良い -->
+        </div>
+    </div>
+
+    <div class="chat-container" id="chat-output">
+        <!-- シミュレーション結果表示エリア -->
+    </div>
+    <div class="regenerate-container" style="display: none;">
+        <button id="regenerate-btn" class="regenerate-btn">シミュレーションを再生成</button>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

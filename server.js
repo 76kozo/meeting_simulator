@@ -1,0 +1,186 @@
+// server.js 実行開始ログ
+console.log("Starting server.js...");
+require('dotenv').config(); // .envファイルから環境変数を読み込む
+console.log(".env loaded.");
+const express = require('express');
+console.log("Express loaded.");
+const cors = require('cors');
+console.log("CORS loaded.");
+// Node.js 18以降で利用可能な fetch API を使う
+// const fetch = require('node-fetch'); // 古いNode.jsバージョン用
+
+const app = express();
+app.use(express.static(__dirname)); // 静的ファイル配信
+const port = 3000; // サーバーがリッスンするポート
+
+// CORSミドルウェアを設定 (異なるオリジンからのリクエストを許可)
+// 開発中は緩めに設定し、本番環境ではより厳格に設定することを推奨
+app.use(cors());
+
+// JSONリクエストボディを解析するためのミドルウェア
+app.use(express.json());
+
+// Gemini APIキーを環境変数から取得
+const apiKey = process.env.GEMINI_API_KEY;
+
+if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
+    console.error("エラー: GEMINI_API_KEY が .env ファイルに設定されていません。");
+    // サーバーは起動するが、API呼び出しは失敗する
+}
+
+// フロントエンドからのシミュレーションリクエストを処理するエンドポイント
+app.post('/api/generate-simulation', async (req, res) => {
+    if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
+        return res.status(500).json({ error: 'サーバー側でAPIキーが設定されていません。' });
+    }
+
+    try {
+        const { basicInfo, assessmentSummary, observationPoints, participants } = req.body; // observationPoints を受け取る
+
+        // 入力データのバリデーション (簡易)
+        if (!basicInfo || !assessmentSummary || !participants) { // observationPoints は任意項目とする
+            return res.status(400).json({ error: '必要な情報が不足しています。' });
+        }
+
+       // 役割ごとの説明を定義
+       const roleDescriptions = {
+            '就労選択支援員': 'アセスメント結果を客観的に報告し、会議全体の進行を担当し、各参加者の意見を引き出し、中立的な立場から支援方針をまとめる視点を持つ。特に本人の意見を丁寧に聞き出すことを心がける。',
+            '特別支援学校教員': '学校生活での様子、強み、課題を共有し、教育的観点から本人の特性を評価し、進路指導の経験から適切な選択肢を提案する視点を持つ。',
+            '相談支援専門員': '本人の生活状況や家族の意向を把握・代弁し、福祉サービスの情報提供や利用調整を行い、長期的な視点での生活設計を支援する視点を持つ。',
+            '就労継続支援B型事業所 職員': '事業所の特徴、作業内容、受け入れ体制を説明し、本人の適性や必要な配慮について意見を述べ、実習時の様子などを共有する視点を持つ。',
+            '就労移行支援事業所 職員': '就労移行支援のプログラム内容や効果を説明し、一般就労の可能性や必要なスキルについて意見を述べ、B型事業所との連携やステップアップを提案する視点を持つ。',
+            '障害者就業・生活支援センター 支援員': '地域の就労支援ネットワークや利用可能な社会資源について情報提供し、就職活動のサポートや定着支援について説明し、関係機関との連携調整役を担う視点を持つ。',
+            '保護者': '家庭での本人の様子や将来への希望、不安を伝え、支援方針に対する意向を表明する視点を持つ。',
+            '本人': '自分の希望や気持ちを積極的に表現し、質問に対して具体的に答える。実習や作業で感じたこと、好きな作業、苦手なこと、将来の希望など、自分の意見をしっかりと伝える。ただし、答えに詰まった場合は、支援者からの丁寧な質問で引き出してもらう。'
+            // 他の役割も必要に応じて追加
+        };
+
+      // 参加者リストと期待される視点を生成（相談支援専門員の指示を強化）
+      const participantListWithRoles = participants.map(p => {
+          let description = '（特記事項なし）';
+          let specificInstruction = ''; // 役割ごとの追加指示
+
+          // 役割名に部分一致する説明を探す
+          for (const roleKey in roleDescriptions) {
+              if (p.role && p.role.includes(roleKey)) {
+                  description = roleDescriptions[roleKey];
+                  // 相談支援専門員への追加指示
+                  if (roleKey === '相談支援専門員') {
+                      specificInstruction = '特に、本人の生活状況や家族の意向を踏まえ、利用可能な福祉サービス（例：グループホーム、移動支援など）や長期的な生活設計について具体的に言及・提案してください。';
+                  }
+                  break;
+              } else if (!p.role && roleKey === '本人' && p.name.includes('本人')) {
+                   description = roleDescriptions['本人'];
+                   break;
+              } else if (!p.role && roleKey === '保護者' && p.name.includes('保護者')) {
+                   description = roleDescriptions['保護者'];
+                   break;
+              }
+          }
+           const rolePart = p.role ? `（${p.role}）` : '';
+           // 追加指示があれば説明に追記
+           const fullDescription = description + (specificInstruction ? ` ${specificInstruction}` : '');
+           return `- ${p.name}${rolePart}: ${fullDescription}`;
+      }).join('\n');
+
+
+      // Gemini APIに送信するプロンプトを作成 (役割ごとの視点を明記)
+      const prompt = `
+システムプロンプト
+
+あなたは多機関連携会議のシミュレーションを行うためのAIアシスタントです。障害者の就労支援に関する専門知識を持ち、以下の各参加者の役割と期待される視点を理解して、リアルな会議の流れを再現してください。
+
+## シミュレーションの目的
+このシミュレーションは、障害者の就労選択支援における多機関連携会議の流れと各参加者の視点を再現し、支援方針決定のプロセスを明らかにすることを目的としています。
+
+## ケース情報
+# 対象者の基本情報
+${basicInfo}
+
+# アセスメント結果概要
+${assessmentSummary}
+
+# 就労選択支援事業での観察ポイント
+${observationPoints || '特記事項なし'}
+
+## 実際の参加者と期待される視点【重要：各参加者はこの視点に基づいて発言してください】
+以下のリストにある各参加者は、記載された期待される視点に基づいて発言を行ってください。特に指示がある場合はそれに従ってください。
+${participantListWithRoles}
+
+## 会議の進行手順【重要：以下の7ステップに沿って議論を進めてください】
+会議は以下の7つのステップで段階的に進行するように、自然な会話の流れを生成してください。各ステップの内容を省略せず、それぞれの議論を適切に行ってください。セクションタイトル（###）は出力に含めないでください。
+
+1.  **開会・参加者紹介**: 進行役が開会宣言と目的説明後、各参加者が簡潔に自己紹介を行う。本人からも自己紹介と簡単な抱負を述べてもらう。
+2.  **就労選択支援での観察結果報告**: 進行役（就労選択支援員）がアセスメント結果と観察ポイントを具体的に報告する。本人に実際の感想を確認する。
+3.  **本人の希望・意向の確認**: 進行役が本人と保護者に、就労に関する希望や支援で感じたことなどを質問し、意向を確認する。本人には作業で楽しかったこと、頑張れたこと、不安なことなどを具体的に聞き出す。
+4.  **各機関からの情報共有**: 学校教員、B型事業所職員、移行支援事業所職員などが、それぞれの立場から本人の状況や事業所の情報を提供する。各報告の後で本人の感想や質問を確認する。
+5.  **意見交換**: 相談支援専門員、センター支援員などが中心となり、これまでの情報に基づき、専門的見地から意見交換や質疑応答を行う。本人の理解度を確認しながら進める。
+6.  **方向性の検討**: 進行役が議論を整理し、B型利用、移行支援利用、その他の可能性など、今後の具体的な方向性について参加者全員で議論する。本人の意見も積極的に引き出す。
+7.  **支援方針の確認**: 進行役が議論の結果を踏まえ、具体的な支援方針を提案し、参加者の合意を確認する。本人に分かりやすく説明し、各機関の役割分担と次回の会議予定なども確認する。最後に本人から決意表明や感想を聞き、保護者の最終意向も確認して閉会する。
+
+## 表現上の注意点
+-   各参加者の専門性や立場、期待される視点を反映した自然な対話を心がける
+-   障害者本人を尊重した表現を使用する
+-   現実的な支援の選択肢や制度的制約を考慮する
+-   専門用語は適切に使用し、必要に応じて噛み砕いた説明を加える
+
+## 出力形式
+「参加者名（役割）: 発言内容」または「参加者名: 発言内容」の形式で、会議の流れに沿った対話形式のみで出力してください。（ステップタイトルは含めないでください）
+会議の最後に、決定された支援方針の要点をまとめてください。
+
+# シミュレーション開始:
+`; // プロンプト文字列の終了
+
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-05-06:generateContent?key=${apiKey}`; // モデル名を指定のものに変更
+        const requestBody = {
+            contents: [{ parts: [{ "text": prompt }] }]
+            // 必要に応じて generationConfig を追加
+        };
+
+        console.log("Gemini APIへのリクエストボディ:", JSON.stringify(requestBody, null, 2));
+
+        // fetch API を使って Gemini API を呼び出す
+        const apiResponse = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
+        });
+
+        const responseData = await apiResponse.json();
+
+        console.log("Gemini APIからのレスポンス:", JSON.stringify(responseData, null, 2));
+
+
+        if (!apiResponse.ok) {
+            console.error("Gemini APIエラー:", responseData);
+            // エラーレスポンスをそのままフロントに返すか、整形するか検討
+            return res.status(apiResponse.status).json({
+                error: `Gemini APIリクエスト失敗: ${apiResponse.statusText}`,
+                details: responseData?.error?.message || '詳細不明'
+            });
+        }
+
+        // 成功した場合、生成されたテキストをフロントエンドに返す
+        const generatedText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (!generatedText) {
+             console.error("Gemini APIレスポンス解析エラー: テキストが見つかりません。", responseData);
+             return res.status(500).json({ error: 'APIから有効なテキストが返されませんでした。' });
+        }
+
+        res.json({ simulation: generatedText });
+
+    } catch (error) {
+        console.error('サーバーエラー:', error);
+        res.status(500).json({ error: 'サーバー内部でエラーが発生しました。', details: error.message });
+    }
+});
+
+// サーバー起動直前のログ
+console.log(`Attempting to start server on port ${port}...`);
+// サーバーを指定ポートで起動
+app.listen(port, () => {
+   console.log(`プロキシサーバーが http://localhost:${port} で起動しました`);
+});

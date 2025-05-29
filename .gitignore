@@ -1,0 +1,9 @@
+# 環境変数ファイル
+.env
+
+# Node.js 依存関係
+node_modules/
+
+# OS固有ファイル
+.DS_Store
+Thumbs.db

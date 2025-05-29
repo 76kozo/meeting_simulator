@@ -1,0 +1,242 @@
+body {
+    font-family: sans-serif;
+    background-color: #f0f0f0; /* 少し明るい背景色に変更 */
+    margin: 0;
+    padding: 20px;
+    color: #333;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 30px; /* 入力フォームとの間に余白 */
+    padding-top: 20px; /* 上部の余白 */
+}
+
+header h1 {
+    font-size: 1.8em;
+    color: #333;
+    margin: 0; /* デフォルトのマージンをリセット */
+}
+
+.input-container {
+    max-width: 800px;
+    margin: 0 auto 20px auto; /* チャットコンテナとの間にマージンを追加 */
+    background-color: #fff;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* 入力フォーム内のh2 */
+.input-container h2 {
+    text-align: center;
+    color: #444;
+    margin-bottom: 20px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+    color: #555;
+}
+
+.form-group textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box; /* paddingを含めて幅計算 */
+    font-size: 1em;
+    resize: vertical; /* 縦方向のリサイズのみ許可 */
+}
+
+.form-group small {
+    display: block;
+    margin-top: 5px;
+    font-size: 0.8em;
+    color: #777;
+}
+
+button[type="submit"] {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    background-color: #4CAF50; /* ボタンの色 */
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1.1em;
+    transition: background-color 0.3s ease;
+}
+
+button[type="submit"]:hover {
+    background-color: #45a049;
+}
+
+.chat-container {
+    max-width: 800px;
+    margin: 0 auto;
+    background-color: #fff;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* 結果表示エリア内のh2 (シミュレーション結果タイトル) */
+.chat-container h2 {
+    text-align: center;
+    font-size: 1.5em; /* メインヘッダーより少し小さく */
+    margin-bottom: 25px; /* 結果との間に少し余白 */
+    color: #333; /* メインヘッダーと同じ色 */
+}
+
+/* 結果表示エリア内のh3 (セクションタイトル) */
+.chat-container h3 {
+     font-size: 1.1em;
+     margin-top: 30px;
+     border-bottom: 1px solid #eee;
+     padding-bottom: 5px;
+     text-align: center; /* セクションタイトルも中央揃え */
+     color: #444;
+     margin-bottom: 20px;
+}
+
+
+.message {
+    display: flex;
+    margin-bottom: 15px;
+    align-items: flex-start; /* アイコンと吹き出しの上端を揃える */
+}
+
+.icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: #ccc; /* デフォルトのアイコン背景色 */
+    margin-right: 10px;
+    flex-shrink: 0; /* アイコンが縮まないように */
+    background-size: cover;
+    background-position: center;
+    /* 各発言者のアイコン用クラス (背景画像は後で設定可能) */
+    /* 例: background-image: url('path/to/icon.png'); */
+}
+
+/* 各発言者のアイコン色分け (仮) */
+.icon.tanaka { background-color: #e0a8a8; }
+.icon.suzuki { background-color: #a8e0a8; }
+.icon.sasaki { background-color: #a8a8e0; }
+.icon.yamada { background-color: #e0dca8; }
+.icon.nakamura { background-color: #a8e0e0; }
+.icon.ito { background-color: #e0a8e0; }
+.icon.sato-father { background-color: #c0c0c0; }
+.icon.sato-taro { background-color: #a8c8e0; }
+/* ユーザー入力に基づく動的クラス用のデフォルトスタイル (script.jsで色指定) */
+.icon.default { background-color: #eee; }
+
+
+.content {
+    display: flex;
+    flex-direction: column;
+    max-width: calc(100% - 50px); /* アイコン幅+マージンを除く */
+}
+
+.name {
+    font-size: 0.8em;
+    color: #555;
+    margin-bottom: 3px;
+}
+
+.bubble {
+    background-color: #e6e6e6; /* 吹き出しの背景色 */
+    padding: 10px 15px;
+    border-radius: 15px;
+    position: relative;
+    word-wrap: break-word; /* 長い単語も折り返す */
+    max-width: 100%;
+    box-sizing: border-box; /* paddingを含めて幅計算 */
+}
+
+/* 吹き出しのしっぽ */
+.bubble::before {
+    content: "";
+    position: absolute;
+    top: 10px;
+    left: -8px; /* しっぽの位置 */
+    border-style: solid;
+    border-width: 8px 10px 8px 0;
+    border-color: transparent #e6e6e6 transparent transparent;
+}
+
+/* 自分の発言を右側に表示する場合 (今回は全員左揃え) */
+/*
+.message.self {
+    flex-direction: row-reverse;
+}
+.message.self .icon {
+    margin-left: 10px;
+    margin-right: 0;
+}
+.message.self .content {
+    align-items: flex-end;
+}
+.message.self .bubble {
+    background-color: #8de04a; // LINEの自分の吹き出し色
+}
+.message.self .bubble::before {
+    left: auto;
+    right: -8px;
+    border-color: transparent transparent transparent #8de04a;
+}
+*/
+
+.summary {
+    margin-top: 40px;
+    padding: 15px;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    border: 1px solid #eee;
+}
+
+.summary h3 {
+    text-align: left;
+    border-bottom: none;
+    margin-top: 10px;
+}
+
+.summary ul {
+    padding-left: 20px;
+}
+
+/* 再生成ボタンのコンテナ */
+.regenerate-container {
+    max-width: 800px;
+    margin: 20px auto;
+    text-align: center;
+}
+
+/* 再生成ボタン */
+.regenerate-btn {
+    padding: 12px 24px;
+    background-color: #4a9eff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1.1em;
+    transition: background-color 0.3s ease;
+}
+
+.regenerate-btn:hover {
+    background-color: #3b8be6;
+}
+
+.regenerate-btn:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
