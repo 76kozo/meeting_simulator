@@ -294,6 +294,34 @@ button[type="submit"]:hover {
 .step-controls {
     text-align: center;
     margin: 20px 0;
+    position: relative;
+    z-index: 10;
+}
+
+/* 固定ボタンエリア */
+.step-controls.floating {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: white;
+    padding: 15px 25px;
+    border-radius: 30px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    margin: 0;
+    animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+    from { 
+        opacity: 0; 
+        transform: translateX(-50%) translateY(20px); 
+    }
+    to { 
+        opacity: 1; 
+        transform: translateX(-50%) translateY(0); 
+    }
 }
 
 .step-btn {
@@ -432,4 +460,18 @@ button[type="submit"]:hover {
 
 .skip-btn:hover {
     background: #e68900;
+}
+
+/* 固定ボタンがある時の下部余白 */
+body.has-floating-controls {
+    padding-bottom: 100px;
+}
+
+/* チャットコンテナの下部余白調整 */
+.chat-container {
+    margin-bottom: 20px;
+}
+
+.chat-container.with-floating-controls {
+    margin-bottom: 120px;
 }

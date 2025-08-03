@@ -103,8 +103,10 @@ async function typeMessage(speaker, message, container) {
         messageDiv.appendChild(contentDiv);
         container.appendChild(messageDiv);
         
-        // メッセージをスクロール表示
-        messageDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        // メッセージをスクロール表示（固定ボタンエリアを考慮）
+        setTimeout(() => {
+            messageDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }, 100);
         
         let currentIndex = 0;
         const totalLength = message.length;
@@ -293,6 +295,12 @@ async function startStep(stepNumber) {
     startStepBtn.disabled = true;
     nextStepBtn.disabled = true;
     
+    // ボタンエリアを非固定に戻す（生成中）
+    const stepControls = document.querySelector('.step-controls');
+    stepControls.classList.remove('floating');
+    document.body.classList.remove('has-floating-controls');
+    document.getElementById('chat-output').classList.remove('with-floating-controls');
+    
     try {
         // ステップ別のAPI呼び出し
         const response = await fetch(window.location.origin + '/api/generate-step', {
@@ -362,14 +370,24 @@ function completeStep(stepNumber) {
         stepElement.classList.add('completed');
     }
     
+    const stepControls = document.querySelector('.step-controls');
+    
     // 次のステップボタンの表示/非表示
     if (stepNumber < stepDefinitions.length) {
         nextStepBtn.style.display = 'inline-block';
         nextStepBtn.disabled = false;
         nextStepBtn.textContent = `ステップ${stepNumber + 1}へ: ${stepDefinitions[stepNumber].name}`;
+        
+        // ボタンを画面下部に固定表示
+        stepControls.classList.add('floating');
+        document.body.classList.add('has-floating-controls');
+        document.getElementById('chat-output').classList.add('with-floating-controls');
     } else {
         // 全ステップ完了
         nextStepBtn.style.display = 'none';
+        stepControls.classList.remove('floating');
+        document.body.classList.remove('has-floating-controls');
+        document.getElementById('chat-output').classList.remove('with-floating-controls');
         
         // 会議終了メッセージを表示
         const chatOutput = document.getElementById('chat-output');
