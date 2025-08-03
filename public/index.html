@@ -76,6 +76,21 @@
                 <button type="button" class="setting-btn" data-expertise="person-centered">本人中心重視</button>
             </div>
         </div>
+
+        <!-- 発言文字数調整 -->
+        <div class="form-group">
+            <label for="speech-length">発言の文字数:</label>
+            <div class="range-control">
+                <input type="range" id="speech-length" class="speech-length-slider" min="1" max="5" value="3" step="1">
+                <div class="range-labels">
+                    <span class="range-label">短め<br>(30-50文字)</span>
+                    <span class="range-label">やや短め<br>(50-80文字)</span>
+                    <span class="range-label active" id="speech-length-label">標準<br>(80-120文字)</span>
+                    <span class="range-label">やや長め<br>(120-180文字)</span>
+                    <span class="range-label">長め<br>(180-250文字)</span>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="input-container" id="custom-input">

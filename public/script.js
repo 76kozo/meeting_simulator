@@ -11,7 +11,8 @@ let currentSettings = {
     assessments: [],
     goalPath: 'consensus',
     progressPattern: 'structured',
-    expertise: 'balanced'
+    expertise: 'balanced',
+    speechLength: 3  // 1:短め, 2:やや短め, 3:標準, 4:やや長め, 5:長め
 };
 
 // 段階的進行とタイピング機能の変数
@@ -98,6 +99,48 @@ assessmentCheckboxes.forEach(checkbox => {
             .map(cb => cb.value);
     });
 });
+
+// 発言文字数スライダー
+const speechLengthSlider = document.getElementById('speech-length');
+const speechLengthLabel = document.getElementById('speech-length-label');
+const rangeLabels = document.querySelectorAll('.range-label');
+
+// 文字数レベルのラベル定義
+const speechLengthLabels = [
+    "短め<br>(30-50文字)",
+    "やや短め<br>(50-80文字)", 
+    "標準<br>(80-120文字)",
+    "やや長め<br>(120-180文字)",
+    "長め<br>(180-250文字)"
+];
+
+speechLengthSlider.addEventListener('input', (e) => {
+    const value = parseInt(e.target.value);
+    currentSettings.speechLength = value;
+    
+    // アクティブラベルを更新
+    rangeLabels.forEach((label, index) => {
+        if (index === value - 1) {
+            label.classList.add('active');
+        } else {
+            label.classList.remove('active');
+        }
+    });
+    
+    console.log('発言文字数設定:', value, getSpeechLengthDescription(value));
+});
+
+// 発言文字数の説明を取得する関数
+function getSpeechLengthDescription(level) {
+    const descriptions = {
+        1: "短め(30-50文字)",
+        2: "やや短め(50-80文字)",
+        3: "標準(80-120文字)", 
+        4: "やや長め(120-180文字)",
+        5: "長め(180-250文字)"
+    };
+    return descriptions[level] || descriptions[3];
+}
 
 // 入力モード切り替え関数
 function toggleInputMode() {

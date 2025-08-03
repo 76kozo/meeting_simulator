@@ -536,6 +536,66 @@ button[type="submit"]:hover {
     }
 }
 
+/* 発言文字数調整スタイル */
+.range-control {
+    margin-top: 10px;
+}
+
+.speech-length-slider {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: #ddd;
+    outline: none;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+    margin-bottom: 15px;
+}
+
+.speech-length-slider:hover {
+    opacity: 1;
+}
+
+.speech-length-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #1976d2;
+    cursor: pointer;
+}
+
+.speech-length-slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #1976d2;
+    cursor: pointer;
+    border: none;
+}
+
+.range-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: #666;
+    margin-top: 5px;
+}
+
+.range-label {
+    text-align: center;
+    flex: 1;
+    padding: 5px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+.range-label.active {
+    background-color: #e3f2fd;
+    color: #1976d2;
+    font-weight: bold;
+}
+
 /* === 段階的進行UI === */
 .step-progress {
     background: white;

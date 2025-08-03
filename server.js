@@ -517,7 +517,7 @@ ${previousContext}`;
 - 「参加者名（役割）: 発言内容」または「参加者名: 発言内容」の形式で出力
 - ${currentStepInfo.expectedMessages}程度の自然な対話を生成
 - このステップに特化した内容のみ生成
-- 発言は簡潔で自然な会話調にする
+- 自然な会話調で表現する
 - 本人の発言を必ず含める
 
 ## 注意事項
@@ -607,6 +607,18 @@ function enhancePromptWithSettings(settings) {
     
     // 制度制約情報を最初に追加
     enhancement += getConstraintsPrompt();
+    
+    // 発言文字数の指示を追加
+    if (settings.speechLength) {
+        const speechLengthInstructions = {
+            1: '各発言は30-50文字程度で簡潔に表現してください。',
+            2: '各発言は50-80文字程度で要点を絞って表現してください。',
+            3: '各発言は80-120文字程度で適度な詳しさで表現してください。',
+            4: '各発言は120-180文字程度でやや詳細に表現してください。',
+            5: '各発言は180-250文字程度で詳細かつ具体的に表現してください。'
+        };
+        enhancement += `\n\n### 発言の長さ指示\n${speechLengthInstructions[settings.speechLength]}\n`;
+    }
     
     // 事前アセスメント情報の追加
     if (settings.assessments && settings.assessments.length > 0) {
