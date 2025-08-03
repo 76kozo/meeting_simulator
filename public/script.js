@@ -12,7 +12,8 @@ let currentSettings = {
     goalPath: 'consensus',
     progressPattern: 'structured',
     expertise: 'balanced',
-    speechLength: 3  // 1:短め, 2:やや短め, 3:標準, 4:やや長め, 5:長め
+    speechLength: 3,  // 1:短め, 2:やや短め, 3:標準, 4:やや長め, 5:長め
+    customRoles: {}   // カスタムロール設定
 };
 
 // 段階的進行とタイピング機能の変数
@@ -140,6 +141,161 @@ function getSpeechLengthDescription(level) {
         5: "長め(180-250文字)"
     };
     return descriptions[level] || descriptions[3];
+}
+
+// === ロールカスタマイズ機能 ===
+
+// デフォルトロール設定
+const defaultRoles = {
+    '就労選択支援員': 'アセスメント結果を客観的に報告し、会議全体の進行を担当し、各参加者の意見を引き出し、中立的な立場から支援方針をまとめる視点を持つ。特に本人の意見を丁寧に聞き出すことを心がける。',
+    '特別支援学校教員': '学校生活での様子、強み、課題を共有し、教育的観点から本人の特性を評価し、進路指導の経験から適切な選択肢を提案する視点を持つ。',
+    '相談支援専門員': '本人の生活状況や家族の意向を把握・代弁し、福祉サービスの情報提供や利用調整を行い、長期的な視点での生活設計を支援する視点を持つ。',
+    '就労継続支援B型事業所 職員': '事業所の特徴、作業内容、受け入れ体制を説明し、本人の適性や必要な配慮について意見を述べ、実習時の様子などを共有する視点を持つ。',
+    '就労移行支援事業所 職員': '就労移行支援のプログラム内容や効果を説明し、一般就労の可能性や必要なスキルについて意見を述べ、B型事業所との連携やステップアップを提案する視点を持つ。',
+    '障害者就業・生活支援センター 支援員': '地域の就労支援ネットワークや利用可能な社会資源について情報提供し、就職活動のサポートや定着支援について説明し、関係機関との連携調整役を担う視点を持つ。',
+    '保護者': '家庭での本人の様子や将来への希望、不安を伝え、支援方針に対する意向を表明する視点を持つ。',
+    '本人': '自分の希望や気持ちを積極的に表現し、質問に対して具体的に答える。実習や作業で感じたこと、好きな作業、苦手なこと、将来の希望など、自分の意見をしっかりと伝える。ただし、答えに詰まった場合は、支援者からの丁寧な質問で引き出してもらう。'
+};
+
+// ロールテンプレート
+const roleTemplates = {
+    default: defaultRoles,
+    medical: {
+        ...defaultRoles,
+        '相談支援専門員': '医療的ケアのニーズを含めた生活支援の調整を行い、医療機関との連携を重視し、健康管理と福祉サービスの統合的な支援を提案する視点を持つ。',
+        '医療ソーシャルワーカー': '医療的観点から本人の健康状態と支援ニーズを評価し、医療チームとの連携を図り、医学的配慮を踏まえた就労支援計画を提案する視点を持つ。',
+        '看護師': '本人の健康状態や服薬管理、医療的ケアの必要性について情報提供し、就労先での健康管理体制について専門的な助言を行う視点を持つ。'
+    },
+    family: {
+        ...defaultRoles,
+        '保護者': '家庭での本人の日常生活、成長の変化、将来への具体的な希望と不安を詳しく伝え、家族としての支援体制や協力可能な範囲について積極的に発言する視点を持つ。',
+        '兄弟姉妹': '兄弟の立場から本人の特性や得意なこと、家庭での様子を共有し、将来にわたる家族の支援体制について発言する視点を持つ。',
+        '本人': '家族の前でも自分の気持ちを率直に表現し、家族に対する感謝や要望も含めて、自分の将来への希望を具体的に伝える視点を持つ。'
+    },
+    'person-centered': {
+        ...defaultRoles,
+        '本人': '自分の人生の主人公として、希望、夢、不安、得意なこと、苦手なことを具体的に表現し、支援者には遠慮なく質問や要望を伝え、自分らしい働き方について積極的に意見する視点を持つ。',
+        '就労選択支援員': '本人の発言を最優先に聞き、本人の言葉を丁寧に確認し、本人が話しやすい環境を作り、本人の自己決定を最大限尊重する進行を心がける視点を持つ。',
+        '相談支援専門員': '本人の意向を第一に、本人が望む生活スタイルを実現するための支援方法を提案し、本人の選択を支える立場で発言する視点を持つ。'
+    },
+    enterprise: {
+        ...defaultRoles,
+        '企業人事担当者': '企業の雇用方針、職場環境、求められるスキル、配慮可能な内容について説明し、実際の雇用に向けた具体的な条件や研修体制について情報提供する視点を持つ。',
+        'ジョブコーチ': '職場での実習や就労支援の経験から、本人の職場適応能力や必要な支援について具体的に報告し、企業との調整について専門的な助言を行う視点を持つ。',
+        '就労移行支援事業所 職員': '企業実習の結果や企業が求めるスキルレベルとの比較を行い、就職に向けた具体的な準備計画と企業との連携方法を提案する視点を持つ。'
+    }
+};
+
+// ロールカスタマイズモーダルの要素
+const roleModal = document.getElementById('role-modal');
+const customizeRolesBtn = document.getElementById('customize-roles-btn');
+const roleModalClose = document.getElementById('role-modal-close');
+const roleTemplateSelect = document.getElementById('role-template-select');
+const applyTemplateBtn = document.getElementById('apply-template-btn');
+const roleList = document.getElementById('role-list');
+const resetRolesBtn = document.getElementById('reset-roles-btn');
+const saveRolesBtn = document.getElementById('save-roles-btn');
+
+// ロールカスタマイズボタンのイベントリスナー
+if (customizeRolesBtn) {
+    customizeRolesBtn.addEventListener('click', () => {
+        openRoleModal();
+    });
+}
+
+// モーダルを開く関数
+function openRoleModal() {
+    updateRoleList();
+    roleModal.style.display = 'flex';
+}
+
+// モーダルを閉じる関数
+function closeRoleModal() {
+    roleModal.style.display = 'none';
+}
+
+// モーダル閉じるボタンのイベントリスナー
+if (roleModalClose) {
+    roleModalClose.addEventListener('click', closeRoleModal);
+}
+
+// モーダル外クリックで閉じる
+roleModal.addEventListener('click', (e) => {
+    if (e.target === roleModal) {
+        closeRoleModal();
+    }
+});
+
+// テンプレート適用ボタンのイベントリスナー
+if (applyTemplateBtn) {
+    applyTemplateBtn.addEventListener('click', () => {
+        const selectedTemplate = roleTemplateSelect.value;
+        applyRoleTemplate(selectedTemplate);
+    });
+}
+
+// テンプレートを適用する関数
+function applyRoleTemplate(templateName) {
+    const template = roleTemplates[templateName];
+    if (template) {
+        currentSettings.customRoles = { ...template };
+        updateRoleList();
+        console.log('テンプレート適用:', templateName);
+    }
+}
+
+// ロール一覧を更新する関数
+function updateRoleList() {
+    const roles = Object.keys(currentSettings.customRoles).length > 0 
+        ? currentSettings.customRoles 
+        : defaultRoles;
+    
+    roleList.innerHTML = '';
+    
+    Object.entries(roles).forEach(([roleName, description]) => {
+        const roleItem = document.createElement('div');
+        roleItem.className = 'role-item';
+        roleItem.innerHTML = `
+            <h4>${roleName}</h4>
+            <textarea data-role="${roleName}" placeholder="この役割の期待される視点・発言内容を入力...">${description}</textarea>
+        `;
+        roleList.appendChild(roleItem);
+    });
+}
+
+// デフォルトに戻すボタンのイベントリスナー
+if (resetRolesBtn) {
+    resetRolesBtn.addEventListener('click', () => {
+        currentSettings.customRoles = {};
+        roleTemplateSelect.value = 'default';
+        updateRoleList();
+        console.log('ロール設定をデフォルトに戻しました');
+    });
+}
+
+// 設定を保存ボタンのイベントリスナー
+if (saveRolesBtn) {
+    saveRolesBtn.addEventListener('click', () => {
+        saveCustomRoles();
+        closeRoleModal();
+    });
+}
+
+// カスタムロールを保存する関数
+function saveCustomRoles() {
+    const roleTextareas = roleList.querySelectorAll('textarea[data-role]');
+    const newCustomRoles = {};
+    
+    roleTextareas.forEach(textarea => {
+        const roleName = textarea.dataset.role;
+        const description = textarea.value.trim();
+        if (description) {
+            newCustomRoles[roleName] = description;
+        }
+    });
+    
+    currentSettings.customRoles = newCustomRoles;
+    console.log('カスタムロール設定を保存:', currentSettings.customRoles);
 }
 
 // 入力モード切り替え関数

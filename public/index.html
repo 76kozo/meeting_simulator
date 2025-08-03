@@ -113,6 +113,7 @@
                 <textarea id="participants" name="participants" rows="6" required></textarea> <!-- rowsを5から6へ変更 -->
                 <small>例: 田中（就労選択支援員・進行役）<br>
                 ※ 役割を明記することで、適切なアイコンと表示名が自動設定されます</small>
+                <button type="button" id="customize-roles-btn" class="role-customize-btn" style="margin-top: 10px;">🎭 ロール設定をカスタマイズ</button>
             </div>
             <button type="button" id="load-test-data">テストデータを読み込む</button>
             <button type="button" id="load-preset-data" style="display: none;">佐藤太郎ケースを読み込む</button>
@@ -171,6 +172,37 @@
     <div class="summary-container" id="summary-output" style="display: none;">
         <!-- AI要約・提案表示エリア -->
     </div>
+
+    <!-- ロール設定モーダル -->
+    <div class="role-modal" id="role-modal" style="display: none;">
+        <div class="role-modal-content">
+            <div class="role-modal-header">
+                <h3>🎭 ロール設定のカスタマイズ</h3>
+                <button class="role-modal-close" id="role-modal-close">&times;</button>
+            </div>
+            <div class="role-modal-body">
+                <div class="role-template-selection">
+                    <label>テンプレート選択:</label>
+                    <select id="role-template-select">
+                        <option value="default">標準設定（現在の設定）</option>
+                        <option value="medical">医療連携強化型</option>
+                        <option value="family">家族参加重視型</option>
+                        <option value="person-centered">本人主導型</option>
+                        <option value="enterprise">企業連携型</option>
+                    </select>
+                    <button type="button" id="apply-template-btn" class="template-btn">テンプレート適用</button>
+                </div>
+                <div class="role-list" id="role-list">
+                    <!-- ロール一覧がここに動的に生成される -->
+                </div>
+            </div>
+            <div class="role-modal-footer">
+                <button type="button" id="reset-roles-btn" class="reset-btn">デフォルトに戻す</button>
+                <button type="button" id="save-roles-btn" class="save-btn">設定を保存</button>
+            </div>
+        </div>
+    </div>
+
     <script src="script.js"></script>
 </body>
 </html>

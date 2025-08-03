@@ -77,13 +77,14 @@ app.post('/api/generate-simulation', async (req, res) => {
     }
 
     try {
-        const { basicInfo, assessmentSummary, observationPoints, participants } = req.body;
+        const { basicInfo, assessmentSummary, observationPoints, participants, settings } = req.body;
 
         if (!basicInfo || !assessmentSummary || !participants) {
             return res.status(400).json({ error: '必要な情報が不足しています。' });
         }
 
-        const roleDescriptions = {
+        // デフォルトのロール説明
+        const defaultRoleDescriptions = {
             '就労選択支援員': 'アセスメント結果を客観的に報告し、会議全体の進行を担当し、各参加者の意見を引き出し、中立的な立場から支援方針をまとめる視点を持つ。特に本人の意見を丁寧に聞き出すことを心がける。',
             '特別支援学校教員': '学校生活での様子、強み、課題を共有し、教育的観点から本人の特性を評価し、進路指導の経験から適切な選択肢を提案する視点を持つ。',
             '相談支援専門員': '本人の生活状況や家族の意向を把握・代弁し、福祉サービスの情報提供や利用調整を行い、長期的な視点での生活設計を支援する視点を持つ。',
@@ -93,6 +94,11 @@ app.post('/api/generate-simulation', async (req, res) => {
             '保護者': '家庭での本人の様子や将来への希望、不安を伝え、支援方針に対する意向を表明する視点を持つ。',
             '本人': '自分の希望や気持ちを積極的に表現し、質問に対して具体的に答える。実習や作業で感じたこと、好きな作業、苦手なこと、将来の希望など、自分の意見をしっかりと伝える。ただし、答えに詰まった場合は、支援者からの丁寧な質問で引き出してもらう。'
         };
+        
+        // カスタムロール設定があれば使用、なければデフォルトを使用
+        const roleDescriptions = (settings && settings.customRoles && Object.keys(settings.customRoles).length > 0) 
+            ? settings.customRoles 
+            : defaultRoleDescriptions;
 
         const participantListWithRoles = participants.map(p => {
             let description = '（特記事項なし）';
@@ -413,7 +419,8 @@ app.post('/api/generate-step', async (req, res) => {
 function generateStepPrompt(stepNumber, formData, previousSteps) {
     const { basicInfo, assessmentSummary, observationPoints, participants } = formData;
     
-    const roleDescriptions = {
+    // デフォルトのロール説明（フロントエンドのdefaultRolesと同期）
+    const defaultRoleDescriptions = {
         '就労選択支援員': 'アセスメント結果を客観的に報告し、会議全体の進行を担当し、各参加者の意見を引き出し、中立的な立場から支援方針をまとめる視点を持つ。特に本人の意見を丁寧に聞き出すことを心がける。',
         '特別支援学校教員': '学校生活での様子、強み、課題を共有し、教育的観点から本人の特性を評価し、進路指導の経験から適切な選択肢を提案する視点を持つ。',
         '相談支援専門員': '本人の生活状況や家族の意向を把握・代弁し、福祉サービスの情報提供や利用調整を行い、長期的な視点での生活設計を支援する視点を持つ。',
@@ -423,6 +430,11 @@ function generateStepPrompt(stepNumber, formData, previousSteps) {
         '保護者': '家庭での本人の様子や将来への希望、不安を伝え、支援方針に対する意向を表明する視点を持つ。',
         '本人': '自分の希望や気持ちを積極的に表現し、質問に対して具体的に答える。実習や作業で感じたこと、好きな作業、苦手なこと、将来の希望など、自分の意見をしっかりと伝える。ただし、答えに詰まった場合は、支援者からの丁寧な質問で引き出してもらう。'
     };
+    
+    // カスタムロール設定があれば使用、なければデフォルトを使用
+    const roleDescriptions = (formData.settings && formData.settings.customRoles && Object.keys(formData.settings.customRoles).length > 0) 
+        ? formData.settings.customRoles 
+        : defaultRoleDescriptions;
 
     const participantListWithRoles = participants.map(p => {
         let description = '（特記事項なし）';
