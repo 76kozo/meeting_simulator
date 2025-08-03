@@ -6,16 +6,59 @@ const express = require('express');
 console.log("Express loaded.");
 const cors = require('cors');
 console.log("CORS loaded.");
-// Node.js 18以降で利用可能な fetch API を使う
-// const fetch = require('node-fetch'); // 古いNode.jsバージョン用
+const path = require('path');
+const basicAuth = require('express-basic-auth');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
-app.use(express.static(__dirname)); // 静的ファイル配信
-const port = 3000; // サーバーがリッスンするポート
+const port = process.env.PORT || 3000;
 
-// CORSミドルウェアを設定 (異なるオリジンからのリクエストを許可)
-// 開発中は緩めに設定し、本番環境ではより厳格に設定することを推奨
-app.use(cors());
+// Basic認証の設定
+const users = {
+    'admin': process.env.ADMIN_PASSWORD || 'default_password'
+};
+
+const auth = basicAuth({
+    users,
+    challenge: true,
+    realm: 'Meeting Simulator'
+});
+
+// すべてのルートにBasic認証を適用
+app.use(auth);
+
+// レート制限の設定
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15分
+    max: 50 // 15分あたり50リクエストまで
+});
+
+app.use('/api/', limiter);
+
+// リファラーチェック
+app.use((req, res, next) => {
+    const referer = req.get('Referer');
+    if (req.path.startsWith('/api/') && (!referer || !referer.includes(req.get('host')))) {
+        return res.status(403).json({ error: '不正なアクセスです' });
+    }
+    next();
+});
+
+// CORSミドルウェアを設定（API ルートの前に配置）
+app.use(cors({
+    origin: process.env.NODE_ENV === 'production'
+        ? process.env.ALLOWED_ORIGIN || false
+        : 'http://localhost:3000',
+    credentials: true
+}));
+
+// 静的ファイルの提供
+app.use(express.static('public'));
+
+// ルートパスのハンドリング
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // JSONリクエストボディを解析するためのミドルウェア
 app.use(express.json());
@@ -25,7 +68,6 @@ const apiKey = process.env.GEMINI_API_KEY;
 
 if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
     console.error("エラー: GEMINI_API_KEY が .env ファイルに設定されていません。");
-    // サーバーは起動するが、API呼び出しは失敗する
 }
 
 // フロントエンドからのシミュレーションリクエストを処理するエンドポイント
@@ -35,15 +77,13 @@ app.post('/api/generate-simulation', async (req, res) => {
     }
 
     try {
-        const { basicInfo, assessmentSummary, observationPoints, participants } = req.body; // observationPoints を受け取る
+        const { basicInfo, assessmentSummary, observationPoints, participants } = req.body;
 
-        // 入力データのバリデーション (簡易)
-        if (!basicInfo || !assessmentSummary || !participants) { // observationPoints は任意項目とする
+        if (!basicInfo || !assessmentSummary || !participants) {
             return res.status(400).json({ error: '必要な情報が不足しています。' });
         }
 
-       // 役割ごとの説明を定義
-       const roleDescriptions = {
+        const roleDescriptions = {
             '就労選択支援員': 'アセスメント結果を客観的に報告し、会議全体の進行を担当し、各参加者の意見を引き出し、中立的な立場から支援方針をまとめる視点を持つ。特に本人の意見を丁寧に聞き出すことを心がける。',
             '特別支援学校教員': '学校生活での様子、強み、課題を共有し、教育的観点から本人の特性を評価し、進路指導の経験から適切な選択肢を提案する視点を持つ。',
             '相談支援専門員': '本人の生活状況や家族の意向を把握・代弁し、福祉サービスの情報提供や利用調整を行い、長期的な視点での生活設計を支援する視点を持つ。',
@@ -52,40 +92,33 @@ app.post('/api/generate-simulation', async (req, res) => {
             '障害者就業・生活支援センター 支援員': '地域の就労支援ネットワークや利用可能な社会資源について情報提供し、就職活動のサポートや定着支援について説明し、関係機関との連携調整役を担う視点を持つ。',
             '保護者': '家庭での本人の様子や将来への希望、不安を伝え、支援方針に対する意向を表明する視点を持つ。',
             '本人': '自分の希望や気持ちを積極的に表現し、質問に対して具体的に答える。実習や作業で感じたこと、好きな作業、苦手なこと、将来の希望など、自分の意見をしっかりと伝える。ただし、答えに詰まった場合は、支援者からの丁寧な質問で引き出してもらう。'
-            // 他の役割も必要に応じて追加
         };
 
-      // 参加者リストと期待される視点を生成（相談支援専門員の指示を強化）
-      const participantListWithRoles = participants.map(p => {
-          let description = '（特記事項なし）';
-          let specificInstruction = ''; // 役割ごとの追加指示
+        const participantListWithRoles = participants.map(p => {
+            let description = '（特記事項なし）';
+            let specificInstruction = '';
 
-          // 役割名に部分一致する説明を探す
-          for (const roleKey in roleDescriptions) {
-              if (p.role && p.role.includes(roleKey)) {
-                  description = roleDescriptions[roleKey];
-                  // 相談支援専門員への追加指示
-                  if (roleKey === '相談支援専門員') {
-                      specificInstruction = '特に、本人の生活状況や家族の意向を踏まえ、利用可能な福祉サービス（例：グループホーム、移動支援など）や長期的な生活設計について具体的に言及・提案してください。';
-                  }
-                  break;
-              } else if (!p.role && roleKey === '本人' && p.name.includes('本人')) {
-                   description = roleDescriptions['本人'];
-                   break;
-              } else if (!p.role && roleKey === '保護者' && p.name.includes('保護者')) {
-                   description = roleDescriptions['保護者'];
-                   break;
-              }
-          }
-           const rolePart = p.role ? `（${p.role}）` : '';
-           // 追加指示があれば説明に追記
-           const fullDescription = description + (specificInstruction ? ` ${specificInstruction}` : '');
-           return `- ${p.name}${rolePart}: ${fullDescription}`;
-      }).join('\n');
+            for (const roleKey in roleDescriptions) {
+                if (p.role && p.role.includes(roleKey)) {
+                    description = roleDescriptions[roleKey];
+                    if (roleKey === '相談支援専門員') {
+                        specificInstruction = '特に、本人の生活状況や家族の意向を踏まえ、利用可能な福祉サービス（例：グループホーム、移動支援など）や長期的な生活設計について具体的に言及・提案してください。';
+                    }
+                    break;
+                } else if (!p.role && roleKey === '本人' && p.name.includes('本人')) {
+                    description = roleDescriptions['本人'];
+                    break;
+                } else if (!p.role && roleKey === '保護者' && p.name.includes('保護者')) {
+                    description = roleDescriptions['保護者'];
+                    break;
+                }
+            }
+            const rolePart = p.role ? `（${p.role}）` : '';
+            const fullDescription = description + (specificInstruction ? ` ${specificInstruction}` : '');
+            return `- ${p.name}${rolePart}: ${fullDescription}`;
+        }).join('\n');
 
-
-      // Gemini APIに送信するプロンプトを作成 (役割ごとの視点を明記)
-      const prompt = `
+        const prompt = `
 システムプロンプト
 
 あなたは多機関連携会議のシミュレーションを行うためのAIアシスタントです。障害者の就労支援に関する専門知識を持ち、以下の各参加者の役割と期待される視点を理解して、リアルな会議の流れを再現してください。
@@ -129,58 +162,75 @@ ${participantListWithRoles}
 会議の最後に、決定された支援方針の要点をまとめてください。
 
 # シミュレーション開始:
-`; // プロンプト文字列の終了
+`;
 
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-05-06:generateContent?key=${apiKey}`; // モデル名を指定のものに変更
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-05-06:generateContent?key=${apiKey}`;
         const requestBody = {
             contents: [{ parts: [{ "text": prompt }] }]
-            // 必要に応じて generationConfig を追加
         };
 
         console.log("Gemini APIへのリクエストボディ:", JSON.stringify(requestBody, null, 2));
 
-        // fetch API を使って Gemini API を呼び出す
-        const apiResponse = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestBody),
-        });
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 45000); // 45秒でタイムアウト
 
-        const responseData = await apiResponse.json();
+        try {
+            const apiResponse = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody),
+                signal: controller.signal
+            });
 
-        console.log("Gemini APIからのレスポンス:", JSON.stringify(responseData, null, 2));
+            clearTimeout(timeout);
 
+            if (!apiResponse.ok) {
+                throw new Error(`Gemini APIエラー: ${apiResponse.status}`);
+            }
 
-        if (!apiResponse.ok) {
-            console.error("Gemini APIエラー:", responseData);
-            // エラーレスポンスをそのままフロントに返すか、整形するか検討
-            return res.status(apiResponse.status).json({
-                error: `Gemini APIリクエスト失敗: ${apiResponse.statusText}`,
-                details: responseData?.error?.message || '詳細不明'
+            const responseData = await apiResponse.json();
+            console.log("Gemini APIからのレスポンス:", JSON.stringify(responseData, null, 2));
+
+            const generatedText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!generatedText) {
+                throw new Error('APIから有効なテキストが返されませんでした。');
+            }
+
+            res.json({ simulation: generatedText });
+        } catch (error) {
+            console.error('APIリクエストエラー:', error);
+            let statusCode = 500;
+            let errorMessage = 'サーバー内部でエラーが発生しました。';
+            
+            if (error.name === 'AbortError') {
+                statusCode = 504;
+                errorMessage = 'リクエストがタイムアウトしました。しばらく時間をおいて再度お試しください。';
+            } else if (error.message.includes('API')) {
+                statusCode = 502;
+                errorMessage = 'APIサービスとの通信に問題が発生しました。';
+            }
+            
+            res.status(statusCode).json({ 
+                error: errorMessage,
+                details: error.message 
             });
         }
-
-        // 成功した場合、生成されたテキストをフロントエンドに返す
-        const generatedText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
-
-        if (!generatedText) {
-             console.error("Gemini APIレスポンス解析エラー: テキストが見つかりません。", responseData);
-             return res.status(500).json({ error: 'APIから有効なテキストが返されませんでした。' });
-        }
-
-        res.json({ simulation: generatedText });
-
     } catch (error) {
         console.error('サーバーエラー:', error);
-        res.status(500).json({ error: 'サーバー内部でエラーが発生しました。', details: error.message });
+        res.status(500).json({ 
+            error: 'サーバー内部でエラーが発生しました。',
+            details: error.message 
+        });
     }
 });
 
-// サーバー起動直前のログ
+// 危険なAPIキー公開エンドポイントを削除
+// セキュリティ上の理由により、このエンドポイントは削除されました
+
+// サーバー起動
 console.log(`Attempting to start server on port ${port}...`);
-// サーバーを指定ポートで起動
 app.listen(port, () => {
-   console.log(`プロキシサーバーが http://localhost:${port} で起動しました`);
+    console.log(`プロキシサーバーが http://localhost:${port} で起動しました`);
 });

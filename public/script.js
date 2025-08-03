@@ -2,6 +2,29 @@
 console.log("script.js loaded successfully.");
 
 const formElement = document.getElementById('simulation-form');
+const loadTestDataBtn = document.getElementById('load-test-data');
+
+// テストデータ読み込みボタンのイベントリスナー
+if (loadTestDataBtn) {
+    loadTestDataBtn.addEventListener('click', async () => {
+        try {
+            const response = await fetch('testdata.json');
+            const testData = await response.json();
+            
+            // フォームに値を設定
+            document.getElementById('basic-info').value = testData.basicInfo;
+            document.getElementById('assessment-summary').value = testData.assessmentSummary;
+            document.getElementById('observation-points').value = testData.observationPoints;
+            document.getElementById('participants').value = testData.participants;
+            
+            console.log('テストデータを読み込みました');
+        } catch (error) {
+            console.error('テストデータの読み込みに失敗しました:', error);
+        }
+    });
+} else {
+    console.error("Error: Load test data button not found!");
+}
 const regenerateBtn = document.getElementById('regenerate-btn');
 const regenerateContainer = document.querySelector('.regenerate-container');
 
@@ -45,75 +68,53 @@ if (formElement) {
     regenerateContainer.style.display = 'none'; // 再生成ボタンを非表示
 
    try {
-       // tryブロックに入ったことを確認
-       console.log("Entering try block...");
-        // --- ローカルプロキシサーバー経由でAPI呼び出し ---
-        const proxyUrl = 'http://localhost:3000/api/generate-simulation'; // ローカルサーバーのエンドポイント
+       console.log("サーバー経由でシミュレーションを生成中...");
 
-        const requestBody = {
-            basicInfo: basicInfo,
-            assessmentSummary: assessmentSummary,
-            observationPoints: observationPoints,
-            participants: participants
-        };
+       // サーバー経由でシミュレーション生成
+       const response = await fetch(window.location.origin + '/api/generate-simulation', {
+           method: 'POST',
+           headers: {
+               'Content-Type': 'application/json',
+           },
+           body: JSON.stringify({
+               basicInfo,
+               assessmentSummary,
+               observationPoints,
+               participants
+           }),
+       });
 
-        const response = await fetch(proxyUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestBody),
-        });
+       if (!response.ok) {
+           const errorData = await response.json();
+           throw new Error(errorData.error || `サーバーリクエスト失敗: ${response.status}`);
+       }
 
-        if (!response.ok) {
-            let errorMessage = `サーバーリクエスト失敗: ${response.status} ${response.statusText}`;
-            try {
-                const errorData = await response.json();
-                console.error("サーバーエラーレスポンス:", errorData);
-                errorMessage += `. ${errorData?.error || ''} ${errorData?.details || ''}`;
-            } catch (e) {
-                // JSON解析に失敗した場合
-                console.error("サーバーエラーレスポンスの解析失敗:", e);
-            }
-            throw new Error(errorMessage);
-        }
+       const data = await response.json();
+       const generatedText = data.simulation;
 
-        const data = await response.json();
-        console.log("サーバーからのレスポンス:", data);
+       if (!generatedText) {
+           throw new Error("サーバーから有効なテキストが返されませんでした。");
+       }
 
-        // サーバーから返された生成済みテキストを取得
-        const generatedText = data.simulation;
+       console.log("生成されたテキスト:", generatedText);
 
-        if (!generatedText) {
-            console.error("サーバーレスポンス解析エラー: テキストが見つかりません。", data);
-            throw new Error("サーバーから有効なテキストが返されませんでした。");
-        }
+       const simulationResult = parseSimulationText(generatedText, participants);
 
-        console.log("生成されたテキスト:", generatedText);
+       lastFormData = {
+           basicInfo,
+           assessmentSummary,
+           observationPoints,
+           participants
+       };
 
-        // 生成されたテキストを解析して表示用データに変換
-        const simulationResult = parseSimulationText(generatedText, participants);
-
-        // フォームデータを保存
-        lastFormData = {
-            basicInfo,
-            assessmentSummary,
-            observationPoints,
-            participants
-        };
-
-        // 結果をチャット形式で表示
-        displaySimulationResult(simulationResult, chatOutput);
-        
-        // 再生成ボタンを表示
-        regenerateContainer.style.display = 'block';
-        // --- ローカルプロキシサーバー経由でのAPI呼び出し ここまで ---
+       displaySimulationResult(simulationResult, chatOutput);
+       
+       regenerateContainer.style.display = 'block';
 
     } catch (error) {
         console.error('シミュレーション生成エラー:', error);
-        chatOutput.innerHTML += `<p style="color: red;">エラーが発生しました: ${error.message}</p>`;
+        displayError(error.message, chatOutput, loadingIndicator);
     } finally {
-        // ローディング非表示
         loadingIndicator.style.display = 'none';
     }
    });
@@ -152,7 +153,7 @@ if (regenerateBtn) {
         loadingIndicator.style.display = 'block';
         
         try {
-            const response = await fetch('http://localhost:3000/api/generate-simulation', {
+            const response = await fetch(window.location.origin + '/api/generate-simulation', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -371,15 +372,26 @@ function displaySimulationResult(result, container) {
                contentDiv.appendChild(bubbleDiv);
                messageDiv.appendChild(iconDiv);
                messageDiv.appendChild(contentDiv);
-              container.appendChild(messageDiv);
+               container.appendChild(messageDiv);
+               
                // メッセージが追加されたことをログ出力
                console.log(`Appended message element for item ${index} (Speaker: ${item.speaker})`);
-           } else { // Corrected position for else
+           } else {
                 console.warn(`Item ${index} is missing speaker or text, or they are not strings. Skipping message creation.`, item);
            }
-       } catch (e) { // Corrected position for catch
+       } catch (e) {
            console.error(`Error processing item ${index}:`, item, e);
        }
-   }); // Corrected position for forEach closing parenthesis
+   });
 }
-// --- 結果表示関数 ここまで ---
+
+// --- エラー表示関数 ---
+function displayError(message, container, loader) {
+    if (container) {
+        container.innerHTML = `<p style="color: red;">${message}</p>`;
+    }
+    if (loader) {
+        loader.style.display = 'none';
+    }
+    console.error("Displayed error:", message);
+}
