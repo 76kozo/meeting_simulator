@@ -301,6 +301,16 @@ async function startStep(stepNumber) {
     document.body.classList.remove('has-floating-controls');
     document.getElementById('chat-output').classList.remove('with-floating-controls');
     
+    // セクションタイトルを追加
+    const chatOutput = document.getElementById('chat-output');
+    const sectionTitle = document.createElement('div');
+    sectionTitle.className = 'section-title';
+    sectionTitle.innerHTML = `
+        <h3>${stepDefinitions[stepNumber - 1].name}</h3>
+        <p class="section-description">${stepDefinitions[stepNumber - 1].description}</p>
+    `;
+    chatOutput.appendChild(sectionTitle);
+    
     try {
         // ステップ別のAPI呼び出し
         const response = await fetch(window.location.origin + '/api/generate-step', {
