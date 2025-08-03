@@ -586,6 +586,12 @@ async function startStep(stepNumber) {
         });
 
         const data = await response.json();
+        
+        // 制度検証結果の確認・表示
+        if (data.validation && data.validation.warning) {
+            displayValidationWarning(data.validation.warning);
+        }
+        
         const stepMessages = parseSimulationText(data.simulation, lastFormData.participants);
         
         // タイピングアニメーションで表示
@@ -1000,6 +1006,40 @@ function displaySimulationResult(result, container) {
            console.error(`Error processing item ${index}:`, item, e);
        }
    });
+}
+
+// 制度検証警告を表示する関数
+function displayValidationWarning(warningMessage) {
+    const chatOutput = document.getElementById('chat-output');
+    
+    const warningDiv = document.createElement('div');
+    warningDiv.className = 'validation-warning';
+    warningDiv.style.cssText = `
+        background: #fff3cd;
+        border: 1px solid #ffeaa7;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 10px 0;
+        color: #856404;
+        font-size: 14px;
+        line-height: 1.5;
+    `;
+    
+    const warningIcon = document.createElement('div');
+    warningIcon.innerHTML = '⚠️ <strong>制度情報の確認</strong>';
+    warningIcon.style.marginBottom = '10px';
+    
+    const warningContent = document.createElement('div');
+    warningContent.innerHTML = warningMessage.replace(/\n/g, '<br>');
+    
+    warningDiv.appendChild(warningIcon);
+    warningDiv.appendChild(warningContent);
+    chatOutput.appendChild(warningDiv);
+    
+    // 警告が表示されたらスクロール
+    setTimeout(() => {
+        warningDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
 }
 
 // --- エラー表示関数 ---

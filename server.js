@@ -198,7 +198,20 @@ ${participantListWithRoles}
                 throw new Error('APIから有効なテキストが返されませんでした。');
             }
 
-            res.json({ simulation: generatedText });
+            // 生成内容の制度的妥当性を検証
+            const violations = validateSimulationContent(generatedText);
+            const validationWarning = generateValidationWarning(violations);
+            
+            // 検証結果を含めてレスポンス
+            const response = { 
+                simulation: generatedText,
+                validation: {
+                    violations: violations,
+                    warning: validationWarning
+                }
+            };
+
+            res.json(response);
         } catch (error) {
             console.error('APIリクエストエラー:', error);
             let statusCode = 500;
@@ -355,7 +368,20 @@ app.post('/api/generate-step', async (req, res) => {
                 throw new Error('APIから有効なテキストが返されませんでした。');
             }
 
-            res.json({ simulation: generatedText });
+            // 生成内容の制度的妥当性を検証
+            const violations = validateSimulationContent(generatedText);
+            const validationWarning = generateValidationWarning(violations);
+            
+            // 検証結果を含めてレスポンス
+            const response = { 
+                simulation: generatedText,
+                validation: {
+                    violations: violations,
+                    warning: validationWarning
+                }
+            };
+
+            res.json(response);
         } catch (error) {
             console.error('APIリクエストエラー:', error);
             let statusCode = 500;
@@ -505,9 +531,82 @@ ${previousContext}`;
     return basePrompt;
 }
 
+// 障害福祉制度の制約情報データベース
+const disabilityServiceConstraints = {
+    serviceRestrictions: {
+        concurrentUse: [
+            {
+                services: ['就労継続支援B型', '就労移行支援'],
+                restriction: '同時利用不可',
+                detail: 'B型事業所と移行支援事業所の併用・隔日利用は認められていません'
+            },
+            {
+                services: ['就労選択支援'],
+                restriction: '単独利用が原則',
+                detail: '就労選択支援は他のサービスとの同時利用はできません'
+            }
+        ],
+        ageRestrictions: [
+            {
+                service: '就労継続支援B型',
+                minAge: 18,
+                detail: '18歳未満の利用は原則認められていません'
+            },
+            {
+                service: '就労移行支援',
+                minAge: 18,
+                maxAge: 65,
+                detail: '18歳以上65歳未満が対象です'
+            }
+        ],
+        usagePeriods: [
+            {
+                service: '就労移行支援',
+                standardPeriod: '2年',
+                maxExtension: '1年',
+                detail: '標準利用期間は2年、特別な場合に1年延長可能'
+            }
+        ]
+    },
+    procedureRequirements: [
+        {
+            requirement: 'サービス等利用計画',
+            detail: '相談支援専門員によるサービス等利用計画の作成が必要'
+        },
+        {
+            requirement: '市町村支給決定',
+            detail: '利用前に市町村による支給決定を受ける必要がある'
+        }
+    ]
+};
+
+// 制度制約情報をプロンプトに追加する関数
+function getConstraintsPrompt() {
+    return `
+
+### 【重要】障害福祉制度の遵守事項
+
+**サービス利用の制約:**
+- 就労継続支援B型と就労移行支援の同時利用・併用・隔日利用は認められていません
+- 就労選択支援は他サービスとの同時利用はできません（単独利用が原則）
+- 18歳未満は就労継続支援B型を利用できません
+- 就労移行支援の標準利用期間は2年（特別な場合1年延長可能）
+
+**必要な手続き:**
+- 相談支援専門員によるサービス等利用計画の作成が必要
+- 市町村による支給決定が前提となります
+
+**重要な注意事項:**
+上記の制度上の制約に反する発言や提案は絶対に行わないでください。
+制度に沿った適切な支援計画のみを議論してください。`;
+}
+
 // 設定に基づくプロンプト拡張関数
 function enhancePromptWithSettings(settings) {
     let enhancement = '';
+    
+    // 制度制約情報を最初に追加
+    enhancement += getConstraintsPrompt();
     
     // 事前アセスメント情報の追加
     if (settings.assessments && settings.assessments.length > 0) {
@@ -548,6 +647,117 @@ function enhancePromptWithSettings(settings) {
     enhancement += `\n### 専門性の活用方針\n${expertiseInstructions[settings.expertise]}\n`;
     
     return enhancement;
+}
+
+// 事実確認用プロンプト生成関数
+function generateFactCheckPrompt(generatedContent) {
+    return `
+生成された会議内容について、障害福祉制度の正確性を確認してください。
+
+【確認対象の内容】
+${generatedContent}
+
+【チェック項目】
+1. 就労継続支援B型と就労移行支援の同時利用・併用・隔日利用について言及がないか
+2. 18歳未満のB型利用について間違った記述がないか
+3. 就労移行支援の利用期間について正確な記述になっているか
+4. サービス等利用計画や市町村支給決定について適切に言及されているか
+
+【指示】
+もし制度上不適切な内容が含まれている場合は、該当部分を指摘し、正しい内容に修正した会議ログを出力してください。
+制度的に問題がない場合は「制度確認完了：問題なし」と回答してください。`;
+}
+
+// 自動検証機能：生成内容の制度的妥当性をチェック
+function validateSimulationContent(generatedText) {
+    const violations = [];
+    const normalizedText = generatedText.toLowerCase();
+    
+    // B型と移行支援の同時利用チェック
+    const hasB型 = normalizedText.includes('b型') || normalizedText.includes('継続支援');
+    const has移行 = normalizedText.includes('移行支援') || normalizedText.includes('移行');
+    
+    if (hasB型 && has移行) {
+        const problematicPatterns = [
+            '隔日', '併用', '同時利用', '並行', '組み合わせ', 
+            'b型も移行も', '移行もb型も', 'どちらも利用'
+        ];
+        
+        for (const pattern of problematicPatterns) {
+            if (normalizedText.includes(pattern)) {
+                violations.push({
+                    type: 'serviceRestriction',
+                    message: 'B型と移行支援の同時利用は認められていません',
+                    pattern: pattern,
+                    severity: 'high'
+                });
+                break;
+            }
+        }
+    }
+    
+    // 18歳未満のB型利用チェック
+    if (hasB型) {
+        const agePatterns = ['17歳', '16歳', '15歳', '14歳', '高校生でb型', '未成年でb型'];
+        for (const pattern of agePatterns) {
+            if (normalizedText.includes(pattern)) {
+                violations.push({
+                    type: 'ageRestriction',
+                    message: '18歳未満はB型事業所を利用できません',
+                    pattern: pattern,
+                    severity: 'high'
+                });
+                break;
+            }
+        }
+    }
+    
+    // 移行支援の期間チェック
+    if (has移行) {
+        const incorrectPeriods = ['3年', '4年', '5年', '無期限', '期限なし'];
+        for (const period of incorrectPeriods) {
+            if (normalizedText.includes(period) && normalizedText.includes('移行')) {
+                violations.push({
+                    type: 'usagePeriod',
+                    message: '移行支援の利用期間は原則2年（延長1年）です',
+                    pattern: period,
+                    severity: 'medium'
+                });
+                break;
+            }
+        }
+    }
+    
+    return violations;
+}
+
+// 検証結果に基づいて警告を生成
+function generateValidationWarning(violations) {
+    if (violations.length === 0) return null;
+    
+    const highSeverityViolations = violations.filter(v => v.severity === 'high');
+    const mediumSeverityViolations = violations.filter(v => v.severity === 'medium');
+    
+    let warning = '⚠️ 制度上の問題が検出されました:\n\n';
+    
+    if (highSeverityViolations.length > 0) {
+        warning += '【重要な問題】\n';
+        highSeverityViolations.forEach(v => {
+            warning += `- ${v.message}\n`;
+        });
+        warning += '\n';
+    }
+    
+    if (mediumSeverityViolations.length > 0) {
+        warning += '【注意事項】\n';
+        mediumSeverityViolations.forEach(v => {
+            warning += `- ${v.message}\n`;
+        });
+    }
+    
+    warning += '\n※ この内容は参考情報として生成されました。実際の制度運用については、最新の法令・通知を必ず確認してください。';
+    
+    return warning;
 }
 
 // AI要約・提案用プロンプト生成関数
