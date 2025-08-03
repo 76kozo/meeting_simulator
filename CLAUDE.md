@@ -32,7 +32,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 1. **多役割会議シミュレーション**: 就労選択支援員、学校職員、相談支援専門員、事業所職員、保護者など様々な参加者役割をサポート
 2. **構造化された会議進行**: 開会から支援方針確認まで7ステップの会議進行
-3. **AI生成対話**: Gemini 2.5 Pro Preview APIを使用した現実的な会話生成
+3. **AI生成対話**: Gemini 2.0 Flash APIを使用した現実的な会話生成
 4. **セキュリティ**: Basic認証、レート制限、リファラーチェック
 5. **デプロイ対応**: Vercelデプロイメント設定（リージョンとタイムアウト設定）
 
@@ -63,3 +63,4 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **コード重複排除**: クライアント側のGemini API直接呼び出しを削除し、サーバー経由に統一
 - **構文エラー修正**: `public/script.js`の構文エラーを修正
 - **アーキテクチャ統一**: すべてのAPI処理をサーバーサイドで実行
+- **モデル更新**: Gemini 2.0 Flash（最新安定版）に更新してパフォーマンス向上

@@ -164,7 +164,7 @@ ${participantListWithRoles}
 # シミュレーション開始:
 `;
 
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-05-06:generateContent?key=${apiKey}`;
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
         const requestBody = {
             contents: [{ parts: [{ "text": prompt }] }]
         };
