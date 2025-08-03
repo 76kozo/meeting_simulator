@@ -226,6 +226,198 @@ ${participantListWithRoles}
     }
 });
 
+// 段階別シミュレーション生成エンドポイント
+app.post('/api/generate-step', async (req, res) => {
+    if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
+        return res.status(500).json({ error: 'サーバー側でAPIキーが設定されていません。' });
+    }
+
+    try {
+        const { stepNumber, formData, previousSteps } = req.body;
+        const { basicInfo, assessmentSummary, observationPoints, participants } = formData;
+
+        if (!basicInfo || !assessmentSummary || !participants || !stepNumber) {
+            return res.status(400).json({ error: '必要な情報が不足しています。' });
+        }
+
+        // ステップ別のプロンプトを生成
+        const stepPrompt = generateStepPrompt(stepNumber, formData, previousSteps);
+
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
+        const requestBody = {
+            contents: [{ parts: [{ "text": stepPrompt }] }]
+        };
+
+        console.log(`ステップ${stepNumber}のGemini APIリクエスト:`, JSON.stringify(requestBody, null, 2));
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000); // 30秒でタイムアウト（短縮）
+
+        try {
+            const apiResponse = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody),
+                signal: controller.signal
+            });
+
+            clearTimeout(timeout);
+
+            if (!apiResponse.ok) {
+                throw new Error(`Gemini APIエラー: ${apiResponse.status}`);
+            }
+
+            const responseData = await apiResponse.json();
+            console.log(`ステップ${stepNumber}のGemini APIレスポンス:`, JSON.stringify(responseData, null, 2));
+
+            const generatedText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!generatedText) {
+                throw new Error('APIから有効なテキストが返されませんでした。');
+            }
+
+            res.json({ simulation: generatedText });
+        } catch (error) {
+            console.error('APIリクエストエラー:', error);
+            let statusCode = 500;
+            let errorMessage = 'サーバー内部でエラーが発生しました。';
+            
+            if (error.name === 'AbortError') {
+                statusCode = 504;
+                errorMessage = 'リクエストがタイムアウトしました。しばらく時間をおいて再度お試しください。';
+            } else if (error.message.includes('API')) {
+                statusCode = 502;
+                errorMessage = 'APIサービスとの通信に問題が発生しました。';
+            }
+            
+            res.status(statusCode).json({ 
+                error: errorMessage,
+                details: error.message 
+            });
+        }
+    } catch (error) {
+        console.error('サーバーエラー:', error);
+        res.status(500).json({ 
+            error: 'サーバー内部でエラーが発生しました。',
+            details: error.message 
+        });
+    }
+});
+
+// ステップ別プロンプト生成関数
+function generateStepPrompt(stepNumber, formData, previousSteps) {
+    const { basicInfo, assessmentSummary, observationPoints, participants } = formData;
+    
+    const roleDescriptions = {
+        '就労選択支援員': 'アセスメント結果を客観的に報告し、会議全体の進行を担当し、各参加者の意見を引き出し、中立的な立場から支援方針をまとめる視点を持つ。特に本人の意見を丁寧に聞き出すことを心がける。',
+        '特別支援学校教員': '学校生活での様子、強み、課題を共有し、教育的観点から本人の特性を評価し、進路指導の経験から適切な選択肢を提案する視点を持つ。',
+        '相談支援専門員': '本人の生活状況や家族の意向を把握・代弁し、福祉サービスの情報提供や利用調整を行い、長期的な視点での生活設計を支援する視点を持つ。',
+        '就労継続支援B型事業所 職員': '事業所の特徴、作業内容、受け入れ体制を説明し、本人の適性や必要な配慮について意見を述べ、実習時の様子などを共有する視点を持つ。',
+        '就労移行支援事業所 職員': '就労移行支援のプログラム内容や効果を説明し、一般就労の可能性や必要なスキルについて意見を述べ、B型事業所との連携やステップアップを提案する視点を持つ。',
+        '障害者就業・生活支援センター 支援員': '地域の就労支援ネットワークや利用可能な社会資源について情報提供し、就職活動のサポートや定着支援について説明し、関係機関との連携調整役を担う視点を持つ。',
+        '保護者': '家庭での本人の様子や将来への希望、不安を伝え、支援方針に対する意向を表明する視点を持つ。',
+        '本人': '自分の希望や気持ちを積極的に表現し、質問に対して具体的に答える。実習や作業で感じたこと、好きな作業、苦手なこと、将来の希望など、自分の意見をしっかりと伝える。ただし、答えに詰まった場合は、支援者からの丁寧な質問で引き出してもらう。'
+    };
+
+    const participantListWithRoles = participants.map(p => {
+        let description = '（特記事項なし）';
+        let specificInstruction = '';
+
+        for (const roleKey in roleDescriptions) {
+            if (p.role && p.role.includes(roleKey)) {
+                description = roleDescriptions[roleKey];
+                if (roleKey === '相談支援専門員') {
+                    specificInstruction = '特に、本人の生活状況や家族の意向を踏まえ、利用可能な福祉サービス（例：グループホーム、移動支援など）や長期的な生活設計について具体的に言及・提案してください。';
+                }
+                break;
+            } else if (!p.role && roleKey === '本人' && p.name.includes('本人')) {
+                description = roleDescriptions['本人'];
+                break;
+            } else if (!p.role && roleKey === '保護者' && p.name.includes('保護者')) {
+                description = roleDescriptions['保護者'];
+                break;
+            }
+        }
+        const rolePart = p.role ? `（${p.role}）` : '';
+        const fullDescription = description + (specificInstruction ? ` ${specificInstruction}` : '');
+        return `- ${p.name}${rolePart}: ${fullDescription}`;
+    }).join('\n');
+
+    // ステップ別の詳細設定
+    const stepSettings = {
+        1: {
+            title: "開会・参加者紹介",
+            description: "会議の開始と各参加者の自己紹介を行います。進行役が開会を宣言し、会議の目的を説明した後、各参加者が簡潔に自己紹介を行います。本人からも自己紹介と簡単な抱負を述べてもらいます。",
+            expectedMessages: "6-8発言"
+        },
+        2: {
+            title: "就労選択支援での観察結果報告",
+            description: "進行役（就労選択支援員）がアセスメント結果と観察ポイントを具体的に報告します。本人に実際の感想も確認します。",
+            expectedMessages: "4-6発言"
+        },
+        3: {
+            title: "本人の希望・意向の確認",
+            description: "進行役が本人と保護者に、就労に関する希望や支援で感じたことなどを質問し、意向を確認します。本人には作業で楽しかったこと、頑張れたこと、不安なことなどを具体的に聞き出します。",
+            expectedMessages: "5-7発言"
+        },
+        4: {
+            title: "各機関からの情報共有",
+            description: "学校教員、B型事業所職員、移行支援事業所職員などが、それぞれの立場から本人の状況や事業所の情報を提供します。各報告の後で本人の感想や質問を確認します。",
+            expectedMessages: "6-9発言"
+        },
+        5: {
+            title: "意見交換",
+            description: "相談支援専門員、センター支援員などが中心となり、これまでの情報に基づき、専門的見地から意見交換や質疑応答を行います。本人の理解度を確認しながら進めます。",
+            expectedMessages: "5-8発言"
+        },
+        6: {
+            title: "支援方針の確認",
+            description: "進行役が議論の結果を踏まえ、具体的な支援方針を提案し、参加者の合意を確認します。本人に分かりやすく説明し、各機関の役割分担と次回の会議予定なども確認します。最後に本人から決意表明や感想を聞き、保護者の最終意向も確認して閉会します。",
+            expectedMessages: "4-6発言"
+        }
+    };
+
+    const currentStepInfo = stepSettings[stepNumber];
+    const previousContext = previousSteps.length > 0 ? 
+        `\n\n## これまでの会議の流れ\n${previousSteps.map(step => `${step.speaker}: ${step.text}`).join('\n')}` : '';
+
+    return `
+あなたは多機関連携会議のシミュレーションを行うためのAIアシスタントです。障害者の就労支援に関する専門知識を持ち、リアルな会議の流れを再現してください。
+
+## 現在のステップ: ${currentStepInfo.title}
+${currentStepInfo.description}
+
+## ケース情報
+### 対象者の基本情報
+${basicInfo}
+
+### アセスメント結果概要
+${assessmentSummary}
+
+### 就労選択支援事業での観察ポイント
+${observationPoints || '特記事項なし'}
+
+## 参加者と期待される視点
+${participantListWithRoles}
+${previousContext}
+
+## 出力指示
+- 「参加者名（役割）: 発言内容」または「参加者名: 発言内容」の形式で出力
+- ${currentStepInfo.expectedMessages}程度の自然な対話を生成
+- このステップに特化した内容のみ生成
+- 発言は簡潔で自然な会話調にする
+- 本人の発言を必ず含める
+
+## 注意事項
+- ステップタイトルは出力に含めない
+- 他のステップの内容は含めない
+- 自然で現実的な対話を心がける
+
+シミュレーション開始:
+`;
+}
+
 // 危険なAPIキー公開エンドポイントを削除
 // セキュリティ上の理由により、このエンドポイントは削除されました
 

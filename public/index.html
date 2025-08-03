@@ -39,9 +39,45 @@
         </div>
     </div>
 
+    <!-- 段階的進行インジケーター -->
+    <div class="step-progress" id="step-progress" style="display: none;">
+        <div class="step-indicator">
+            <div class="step-item pending" id="step-1">1. 開会・紹介</div>
+            <div class="step-item pending" id="step-2">2. 観察報告</div>
+            <div class="step-item pending" id="step-3">3. 希望確認</div>
+            <div class="step-item pending" id="step-4">4. 情報共有</div>
+            <div class="step-item pending" id="step-5">5. 意見交換</div>
+            <div class="step-item pending" id="step-6">6. 方針確認</div>
+        </div>
+        <div class="step-controls">
+            <button id="start-step-btn" class="step-btn">会議を開始</button>
+            <button id="next-step-btn" class="step-btn" style="display: none;">次のステップへ</button>
+        </div>
+        <!-- タイピング速度調整 -->
+        <div class="typing-controls">
+            <div class="speed-control">
+                <label for="typing-speed">タイピング速度:</label>
+                <input type="range" id="typing-speed" class="speed-slider" min="20" max="200" value="80">
+                <span id="speed-value">80</span> 文字/秒
+            </div>
+            <button id="skip-typing-btn" class="skip-btn">スキップ</button>
+        </div>
+    </div>
+
+    <!-- タイピングインジケーター -->
+    <div class="typing-indicator" id="typing-indicator">
+        <span class="typing-text" id="typing-speaker">田中さんが入力中</span>
+        <div class="typing-dots">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+        </div>
+    </div>
+
     <div class="chat-container" id="chat-output">
         <!-- シミュレーション結果表示エリア -->
     </div>
+    
     <div class="regenerate-container" style="display: none;">
         <button id="regenerate-btn" class="regenerate-btn">シミュレーションを再生成</button>
     </div>
