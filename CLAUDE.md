@@ -21,9 +21,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 継続的な機能拡張が可能な安定基盤
 
 ### 🌐 本番環境
-- **URL**: https://meeting-simulator-hlplmfd06-76kozos-projects.vercel.app
+- **URL**: https://meeting-simulator-qs5a8uz35-76kozos-projects.vercel.app
 - **認証**: Basic認証（admin/パスワード）
-- **最新デプロイ**: 2025年8月3日（ロールカスタマイズ機能追加）
+- **最新デプロイ**: 2025年8月3日（制度準拠性向上: AI要約機能修正）
 - **ステータス**: ✅ Ready（稼働中）
 
 ### 主要コンポーネント
@@ -76,7 +76,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 8. **設定選択機能**: ケースタイプ、アセスメント手法、目標設定パターンなどの詳細設定
 
-9. **AI要約・提案機能**: 会議内容の自動要約と次のステップ提案
+9. **AI要約・提案機能**: 就労選択支援事業の制度趣旨に沿った会議成果の自動要約
+   - アセスメント結果の総合所見（多角的評価と統合的判断）
+   - 本人への情報提供内容（理解しやすい選択肢の整理）
+   - 関係機関の連携体制（バトンの引き継ぎと継続支援体制）
+   - 選択支援提案（本人の自己選択・進路選択・意思決定支援）
 
 10. **固定ケース**: よく使用される会議パターンの事前設定
 
@@ -176,6 +180,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - 5つのロールテンプレート（標準・医療連携・家族重視・本人主導・企業連携）
   - シンプルなモーダルUIによる個別ロール編集
   - テンプレート適用→個別調整の効率的ワークフロー
+- ✅ **制度準拠性向上**: AI要約・提案機能を就労選択支援事業の正確な目的に修正
+  - 「短期目標」を削除し、アセスメント結果の総合所見に変更
+  - 本人への情報提供内容と関係機関の連携体制を明確化
+  - 選択支援提案で本人の自己選択・進路選択・意思決定支援に特化
 
 ### 🔧 技術的改善（完了）
 - ✅ **新API エンドポイント**: `/api/generate-step`による段階別処理
@@ -201,6 +209,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 📚 **学習効率**: 統一された表示による理解促進
 - 🎭 **カスタマイズ性**: 地域・用途に応じた柔軟なロール設定
 - 📏 **表現制御**: 発言の詳細度をユーザーの学習段階に合わせて調整
+- ⚖️ **制度準拠性**: 就労選択支援事業の正確な目的と制度趣旨に完全対応
 
 ## 使用方法
 
