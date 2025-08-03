@@ -151,6 +151,28 @@ function hideTypingIndicator() {
     }
 }
 
+// 発言者名からアイコンクラスを生成するヘルパー関数
+function getIconClass(speakerName) {
+    // 既存のクラス名を優先的にチェック
+    if (speakerName.includes("田中")) return "tanaka";
+    if (speakerName.includes("鈴木")) return "suzuki";
+    if (speakerName.includes("佐々木")) return "sasaki";
+    if (speakerName.includes("山田")) return "yamada";
+    if (speakerName.includes("中村")) return "nakamura";
+    if (speakerName.includes("伊藤")) return "ito";
+    if (speakerName === "佐藤（父）" || (speakerName === "佐藤" && speakerName.includes("父"))) return "sato-father";
+    if (speakerName === "佐藤太郎" || (speakerName === "佐藤" && !speakerName.includes("父"))) return "sato-taro";
+
+    // 動的にクラス名を生成 (より汎用的)
+    const normalizedName = speakerName.toLowerCase()
+        .replace(/（.*?）|\(.*?\)/g, '') // 括弧と中身を削除
+        .replace(/\s+/g, '-') // スペースをハイフンに
+        .replace(/[^a-z0-9-]/g, ''); // 英数字とハイフン以外を削除
+    if (normalizedName) return normalizedName;
+
+    return "default"; // 不明な発言者用
+}
+
 // 段階的にメッセージを表示
 async function displayMessagesWithTyping(messages, container) {
     for (const message of messages) {
@@ -504,27 +526,6 @@ function displaySimulationResult(result, container) {
    step1Title.textContent = '開会・参加者紹介'; // プロンプトで指定したステップ名
    container.appendChild(step1Title);
 
-    // 発言者名からアイコンクラスを生成するヘルパー関数
-    const getIconClass = (speakerName) => {
-        // 既存のクラス名を優先的にチェック
-        if (speakerName.includes("田中")) return "tanaka";
-        if (speakerName.includes("鈴木")) return "suzuki";
-        if (speakerName.includes("佐々木")) return "sasaki";
-        if (speakerName.includes("山田")) return "yamada";
-        if (speakerName.includes("中村")) return "nakamura";
-        if (speakerName.includes("伊藤")) return "ito";
-        if (speakerName === "佐藤（父）" || (speakerName === "佐藤" && result.some(item => item.speaker === "佐藤（父）"))) return "sato-father";
-        if (speakerName === "佐藤太郎" || (speakerName === "佐藤" && result.some(item => item.speaker === "佐藤太郎"))) return "sato-taro";
-
-        // 動的にクラス名を生成 (より汎用的)
-        const normalizedName = speakerName.toLowerCase()
-            .replace(/（.*?）|\(.*?\)/g, '') // 括弧と中身を削除
-            .replace(/\s+/g, '-') // スペースをハイフンに
-            .replace(/[^a-z0-9-]/g, ''); // 英数字とハイフン以外を削除
-        if (normalizedName) return normalizedName;
-
-        return "default"; // 不明な発言者用
-    };
 
     // 既存のスタイルシートルールをキャッシュ (パフォーマンス改善)
     const existingClasses = new Set();
