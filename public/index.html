@@ -10,7 +10,75 @@
     <header>
         <h1>多機関連携会議シミュレーション</h1>
     </header>
-    <div class="input-container">
+    <!-- 設定選択セクション -->
+    <div class="settings-container">
+        <h2>シミュレーション設定</h2>
+        
+        <!-- ケース選択 -->
+        <div class="form-group">
+            <label>ケース選択:</label>
+            <div class="button-group case-selection">
+                <button type="button" class="setting-btn active" data-case="custom">カスタムケース</button>
+                <button type="button" class="setting-btn" data-case="preset">固定ケース（佐藤太郎）</button>
+            </div>
+        </div>
+
+        <!-- 事前アセスメント情報 -->
+        <div class="form-group">
+            <label>事前アセスメント情報:</label>
+            <div class="checkbox-group">
+                <label class="checkbox-item">
+                    <input type="checkbox" name="assessment" value="work-observation"> 作業観察結果
+                </label>
+                <label class="checkbox-item">
+                    <input type="checkbox" name="assessment" value="aptitude-test"> 適性検査結果
+                </label>
+                <label class="checkbox-item">
+                    <input type="checkbox" name="assessment" value="interview-result"> 面談結果
+                </label>
+                <label class="checkbox-item">
+                    <input type="checkbox" name="assessment" value="school-report"> 学校からの情報
+                </label>
+                <label class="checkbox-item">
+                    <input type="checkbox" name="assessment" value="family-interview"> 家族面談結果
+                </label>
+                <label class="checkbox-item">
+                    <input type="checkbox" name="assessment" value="medical-info"> 医療機関からの情報
+                </label>
+            </div>
+        </div>
+
+        <!-- 会議のゴールパス -->
+        <div class="form-group">
+            <label>会議のゴールパス:</label>
+            <div class="button-group goal-path">
+                <button type="button" class="setting-btn active" data-goal="consensus">合意形成重視</button>
+                <button type="button" class="setting-btn" data-goal="exploration">選択肢探索重視</button>
+                <button type="button" class="setting-btn" data-goal="empowerment">本人エンパワメント重視</button>
+            </div>
+        </div>
+
+        <!-- 会議の進行パターン -->
+        <div class="form-group">
+            <label>会議の進行パターン:</label>
+            <div class="button-group progress-pattern">
+                <button type="button" class="setting-btn active" data-pattern="structured">構造化進行</button>
+                <button type="button" class="setting-btn" data-pattern="flexible">柔軟な進行</button>
+            </div>
+        </div>
+
+        <!-- 専門性の強調 -->
+        <div class="form-group">
+            <label>専門性の強調:</label>
+            <div class="button-group expertise">
+                <button type="button" class="setting-btn active" data-expertise="balanced">バランス重視</button>
+                <button type="button" class="setting-btn" data-expertise="technical">専門的見解重視</button>
+                <button type="button" class="setting-btn" data-expertise="person-centered">本人中心重視</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="input-container" id="custom-input">
         <h2>シミュレーション情報入力</h2>
         <form id="simulation-form">
             <div class="form-group">
@@ -31,6 +99,7 @@
                 <small>例: 田中（就労選択支援員・進行役）</small>
             </div>
             <button type="button" id="load-test-data">テストデータを読み込む</button>
+            <button type="button" id="load-preset-data" style="display: none;">佐藤太郎ケースを読み込む</button>
             <button type="submit">シミュレーション開始</button>
         </form>
         <div id="loading-indicator" style="display: none; text-align: center; margin-top: 15px;">
@@ -80,6 +149,11 @@
     
     <div class="regenerate-container" style="display: none;">
         <button id="regenerate-btn" class="regenerate-btn">シミュレーションを再生成</button>
+        <button id="generate-summary-btn" class="summary-btn">🎆 AI要約・提案を生成</button>
+    </div>
+    
+    <div class="summary-container" id="summary-output" style="display: none;">
+        <!-- AI要約・提案表示エリア -->
     </div>
     <script src="script.js"></script>
 </body>

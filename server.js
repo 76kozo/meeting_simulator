@@ -226,6 +226,84 @@ ${participantListWithRoles}
     }
 });
 
+// AI要約・提案生成エンドポイント
+app.post('/api/generate-summary', async (req, res) => {
+    if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
+        return res.status(500).json({ error: 'サーバー側でAPIキーが設定されていません。' });
+    }
+
+    try {
+        const { formData, meetingLog } = req.body;
+
+        if (!formData || !meetingLog) {
+            return res.status(400).json({ error: '必要な情報が不足しています。' });
+        }
+
+        // AI要約・提案用プロンプトを生成
+        const summaryPrompt = generateSummaryPrompt(formData, meetingLog);
+
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
+        const requestBody = {
+            contents: [{ parts: [{ "text": summaryPrompt }] }]
+        };
+
+        console.log('AI要約・提案のGemini APIリクエスト:', JSON.stringify(requestBody, null, 2));
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
+
+        try {
+            const apiResponse = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody),
+                signal: controller.signal
+            });
+
+            clearTimeout(timeout);
+
+            if (!apiResponse.ok) {
+                throw new Error(`Gemini APIエラー: ${apiResponse.status}`);
+            }
+
+            const responseData = await apiResponse.json();
+            console.log('AI要約・提案のGemini APIレスポンス:', JSON.stringify(responseData, null, 2));
+
+            const generatedText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!generatedText) {
+                throw new Error('APIから有効なテキストが返されませんでした。');
+            }
+
+            res.json({ summary: generatedText });
+        } catch (error) {
+            console.error('APIリクエストエラー:', error);
+            let statusCode = 500;
+            let errorMessage = 'サーバー内部でエラーが発生しました。';
+            
+            if (error.name === 'AbortError') {
+                statusCode = 504;
+                errorMessage = 'リクエストがタイムアウトしました。しばらく時間をおいて再度お試しください。';
+            } else if (error.message.includes('API')) {
+                statusCode = 502;
+                errorMessage = 'APIサービスとの通信に問題が発生しました。';
+            }
+            
+            res.status(statusCode).json({ 
+                error: errorMessage,
+                details: error.message 
+            });
+        }
+    } catch (error) {
+        console.error('サーバーエラー:', error);
+        res.status(500).json({ 
+            error: 'サーバー内部でエラーが発生しました。',
+            details: error.message 
+        });
+    }
+});
+
 // 段階別シミュレーション生成エンドポイント
 app.post('/api/generate-step', async (req, res) => {
     if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
@@ -382,7 +460,7 @@ function generateStepPrompt(stepNumber, formData, previousSteps) {
     const previousContext = previousSteps.length > 0 ? 
         `\n\n## これまでの会議の流れ\n${previousSteps.map(step => `${step.speaker}: ${step.text}`).join('\n')}` : '';
 
-    return `
+    let basePrompt = `
 あなたは多機関連携会議のシミュレーションを行うためのAIアシスタントです。障害者の就労支援に関する専門知識を持ち、リアルな会議の流れを再現してください。
 
 ## 現在のステップ: ${currentStepInfo.title}
@@ -400,7 +478,14 @@ ${observationPoints || '特記事項なし'}
 
 ## 参加者と期待される視点
 ${participantListWithRoles}
-${previousContext}
+${previousContext}`;
+
+    // 設定に基づくプロンプト拡張
+    if (formData.settings) {
+        basePrompt += enhancePromptWithSettings(formData.settings);
+    }
+    
+    basePrompt += `
 
 ## 出力指示
 - 「参加者名（役割）: 発言内容」または「参加者名: 発言内容」の形式で出力
@@ -415,6 +500,85 @@ ${previousContext}
 - 自然で現実的な対話を心がける
 
 シミュレーション開始:
+`;
+
+    return basePrompt;
+}
+
+// 設定に基づくプロンプト拡張関数
+function enhancePromptWithSettings(settings) {
+    let enhancement = '';
+    
+    // 事前アセスメント情報の追加
+    if (settings.assessments && settings.assessments.length > 0) {
+        const assessmentTexts = {
+            'work-observation': '作業観察結果が詳細に実施されている',
+            'aptitude-test': '適性検査による客観的データがある', 
+            'interview-result': '本人面談による意向確認が行われている',
+            'school-report': '学校からの詳細な情報提供がある',
+            'family-interview': '家族面談による家庭状況の把握ができている',
+            'medical-info': '医療機関からの専門的な情報がある'
+        };
+        
+        const selectedAssessments = settings.assessments.map(a => assessmentTexts[a]).join('、');
+        enhancement += `\n\n### 利用可能な事前アセスメント情報\n${selectedAssessments}\n`;
+    }
+    
+    // ゴールパスに応じた指示
+    const goalInstructions = {
+        'consensus': '参加者全員の合意形成を重視し、異なる意見を調整しながら進めてください。',
+        'exploration': '様々な選択肢を幅広く検討し、本人の可能性を最大限探索してください。',
+        'empowerment': '本人の自己決定と主体性を最重視し、本人の発言を中心に据えてください。'
+    };
+    enhancement += `\n### 会議のゴール設定\n${goalInstructions[settings.goalPath]}\n`;
+    
+    // 進行パターンの指示
+    const progressInstructions = {
+        'structured': 'あらかじめ決められた議題に沿って、段階的に構造化して進行してください。',
+        'flexible': '参加者の発言や状況に応じて、柔軟で自然な流れで進行してください。'
+    };
+    enhancement += `\n### 進行方針\n${progressInstructions[settings.progressPattern]}\n`;
+    
+    // 専門性の強調
+    const expertiseInstructions = {
+        'balanced': '各専門職の視点をバランス良く取り入れながら進めてください。',
+        'technical': '各分野の専門的知見と技術的観点を重視した議論を展開してください。',
+        'person-centered': '専門的視点よりも本人中心の考え方を最優先に進めてください。'
+    };
+    enhancement += `\n### 専門性の活用方針\n${expertiseInstructions[settings.expertise]}\n`;
+    
+    return enhancement;
+}
+
+// AI要約・提案用プロンプト生成関数
+function generateSummaryPrompt(formData, meetingLog) {
+    const { basicInfo, assessmentSummary, observationPoints, participants } = formData;
+    
+    return `
+あなたは経験豊富な障害福祉の専門家であり、多機関連携会議のファシリテーターです。
+以下の会議の会話ログを分析し、次の2つのタスクを実行してください。出力はHTML形式でお願いします。
+
+## タスク1: 会議の結論の要約
+以下の3つの項目で、会議で決定された事項を簡潔にまとめてください。見出しは<h4>タグで、内容は<ul><li>タグで記述してください。
+- 支援方針
+- 短期目標(3ヶ月後)
+- 役割分担
+
+## タスク2: ✨ 次のステップへの創造的な提案
+会議の結果を踏まえ、本人と支援チームが次に取り組むべき、具体的で希望の持てるアクションプランを3つ提案してください。単なるタスクリストではなく、本人の強みを活かし、自己肯定感を高めるような、創造的でワクワクするような提案を心がけてください。見出しは<h4>タグで、各提案は<p>タグで記述してください。
+
+## ケース情報参考
+### 対象者の基本情報
+${basicInfo}
+
+### アセスメント結果概要
+${assessmentSummary}
+
+### 観察ポイント
+${observationPoints || '特記事項なし'}
+
+## 会議ログ
+${meetingLog}
 `;
 }
 

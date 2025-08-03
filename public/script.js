@@ -3,6 +3,16 @@ console.log("script.js loaded successfully.");
 
 const formElement = document.getElementById('simulation-form');
 const loadTestDataBtn = document.getElementById('load-test-data');
+const loadPresetDataBtn = document.getElementById('load-preset-data');
+
+// 設定管理用の状態
+let currentSettings = {
+    caseType: 'custom',
+    assessments: [],
+    goalPath: 'consensus',
+    progressPattern: 'structured',
+    expertise: 'balanced'
+};
 
 // 段階的進行とタイピング機能の変数
 let currentStep = 0;
@@ -31,6 +41,81 @@ const stepDefinitions = [
     { id: 6, name: "支援方針確認", description: "具体的な支援方針の決定" }
 ];
 
+// === 設定UIのイベントリスナー ===
+
+// ケース選択ボタン
+const caseSelectionBtns = document.querySelectorAll('.case-selection .setting-btn');
+caseSelectionBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        // アクティブ状態を更新
+        caseSelectionBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        // 設定を更新
+        currentSettings.caseType = btn.dataset.case;
+        
+        // UIを切り替え
+        toggleInputMode();
+    });
+});
+
+// ゴールパスボタン
+const goalPathBtns = document.querySelectorAll('.goal-path .setting-btn');
+goalPathBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        goalPathBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentSettings.goalPath = btn.dataset.goal;
+    });
+});
+
+// 進行パターンボタン
+const progressPatternBtns = document.querySelectorAll('.progress-pattern .setting-btn');
+progressPatternBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        progressPatternBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentSettings.progressPattern = btn.dataset.pattern;
+    });
+});
+
+// 専門性ボタン
+const expertiseBtns = document.querySelectorAll('.expertise .setting-btn');
+expertiseBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        expertiseBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentSettings.expertise = btn.dataset.expertise;
+    });
+});
+
+// チェックボックス
+const assessmentCheckboxes = document.querySelectorAll('input[name="assessment"]');
+assessmentCheckboxes.forEach(checkbox => {
+    checkbox.addEventListener('change', () => {
+        currentSettings.assessments = Array.from(assessmentCheckboxes)
+            .filter(cb => cb.checked)
+            .map(cb => cb.value);
+    });
+});
+
+// 入力モード切り替え関数
+function toggleInputMode() {
+    const customInput = document.getElementById('custom-input');
+    const loadTestBtn = document.getElementById('load-test-data');
+    const loadPresetBtn = document.getElementById('load-preset-data');
+    
+    if (currentSettings.caseType === 'custom') {
+        customInput.style.display = 'block';
+        loadTestBtn.style.display = 'inline-block';
+        loadPresetBtn.style.display = 'none';
+    } else {
+        customInput.style.display = 'block'; // フォームは表示したまま
+        loadTestBtn.style.display = 'none';
+        loadPresetBtn.style.display = 'inline-block';
+    }
+}
+
 // テストデータ読み込みボタンのイベントリスナー
 if (loadTestDataBtn) {
     loadTestDataBtn.addEventListener('click', async () => {
@@ -51,6 +136,32 @@ if (loadTestDataBtn) {
     });
 } else {
     console.error("Error: Load test data button not found!");
+}
+
+// 佐藤太郎ケース読み込みボタン
+if (loadPresetDataBtn) {
+    loadPresetDataBtn.addEventListener('click', async () => {
+        try {
+            const response = await fetch('preset-data.json');
+            const presetData = await response.json();
+            const satouData = presetData['satou-tarou'];
+            
+            // フォームに佐藤太郎ケースのデータを設定
+            document.getElementById('basic-info').value = satouData.basicInfo;
+            document.getElementById('assessment-summary').value = satouData.assessmentSummary;
+            document.getElementById('observation-points').value = satouData.observationPoints;
+            document.getElementById('participants').value = satouData.participants;
+            
+            console.log('佐藤太郎ケースを読み込みました');
+        } catch (error) {
+            console.error('プリセットデータの読み込みに失敗しました:', error);
+            // フォールバック用の簡易データ
+            document.getElementById('basic-info').value = '佐藤太郎（18歳・男性）、知的障害（B2）・自閉スペクトラム症';
+            document.getElementById('assessment-summary').value = '強み: 手先が器用、高い集中力\n課題: 突発的な変更に弱い、自発的なコミュニケーションが少ない';
+            document.getElementById('observation-points').value = '作業観察では手先を使った細かい作業で高い集中力を発揮。ルーティンワークを好み、予定変更時に不安を示すことがあった。';
+            document.getElementById('participants').value = '田中（就労選択支援員・進行役）\n佐藤太郎（本人）\n佐藤（父）\n山田（特別支援学校教員）\n鈴木（就労継続B型事業所 職員）\n伊藤（就労移行支援事業所 職員）\n中村（相談支援専門員）\n佐々木（障害者就業・生活支援センター 支援員）';
+        }
+    });
 }
 
 // === タイピングアニメーション機能 ===
@@ -175,6 +286,72 @@ function getIconClass(speakerName) {
     return "default"; // 不明な発言者用
 }
 
+// リトライ機能付きAPIコール
+async function callApiWithRetry(url, options, maxRetries = 3) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const response = await fetch(url, options);
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP Error: ${response.status}`);
+            }
+            
+            return response;
+        } catch (error) {
+            console.error(`API呼び出し試行 ${attempt}/${maxRetries} 失敗:`, error);
+            
+            if (attempt === maxRetries) {
+                throw error;
+            }
+            
+            // 指数バックオフ: 1秒、2秒、4秒待機
+            const delay = Math.pow(2, attempt - 1) * 1000;
+            console.log(`${delay/1000}秒後にリトライします...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+}
+
+// エラーモーダル表示
+function showErrorModal(title, message, details = null) {
+    // 既存のモーダルを削除
+    const existingModal = document.querySelector('.error-modal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    const modal = document.createElement('div');
+    modal.className = 'error-modal';
+    modal.innerHTML = `
+        <div class="error-modal-content">
+            <div class="error-modal-header">
+                <h3>❌ ${title}</h3>
+                <button class="error-modal-close">&times;</button>
+            </div>
+            <div class="error-modal-body">
+                <p>${message}</p>
+                ${details ? `<details><summary>詳細情報</summary><pre>${details}</pre></details>` : ''}
+            </div>
+            <div class="error-modal-footer">
+                <button class="error-modal-retry" style="display: none;">再試行</button>
+                <button class="error-modal-ok">OK</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // イベントリスナー
+    modal.querySelector('.error-modal-close').addEventListener('click', () => modal.remove());
+    modal.querySelector('.error-modal-ok').addEventListener('click', () => modal.remove());
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+    });
+    
+    return modal;
+}
+
 // 段階的にメッセージを表示
 async function displayMessagesWithTyping(messages, container) {
     for (const message of messages) {
@@ -186,10 +363,13 @@ async function displayMessagesWithTyping(messages, container) {
     }
 }
 const regenerateBtn = document.getElementById('regenerate-btn');
+const generateSummaryBtn = document.getElementById('generate-summary-btn');
 const regenerateContainer = document.querySelector('.regenerate-container');
+const summaryContainer = document.getElementById('summary-output');
 
-// 最後に使用したフォームデータを保持する変数
+// 最後に使用したフォームデータと会議ログを保持する変数
 let lastFormData = null;
+let meetingLog = '';
 
 // === 段階的進行機能 ===
 
@@ -220,13 +400,16 @@ if (formElement) {
 
     console.log("解析された参加者リスト:", participants);
 
-    // フォームデータを保存
+    // フォームデータと設定を保存
     lastFormData = {
         basicInfo,
         assessmentSummary,
         observationPoints,
-        participants
+        participants,
+        settings: { ...currentSettings } // 設定も含める
     };
+    
+    console.log('現在の設定:', currentSettings);
 
     // 段階的進行UIを表示
     stepProgress.style.display = 'block';
@@ -312,8 +495,8 @@ async function startStep(stepNumber) {
     chatOutput.appendChild(sectionTitle);
     
     try {
-        // ステップ別のAPI呼び出し
-        const response = await fetch(window.location.origin + '/api/generate-step', {
+        // ステップ別のAPI呼び出し（リトライ機能付き）
+        const response = await callApiWithRetry(window.location.origin + '/api/generate-step', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -324,11 +507,6 @@ async function startStep(stepNumber) {
                 previousSteps: currentStepData || []
             }),
         });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || `API呼び出し失敗: ${response.status}`);
-        }
 
         const data = await response.json();
         const stepMessages = parseSimulationText(data.simulation, lastFormData.participants);
@@ -346,6 +524,22 @@ async function startStep(stepNumber) {
         
     } catch (error) {
         console.error('ステップ生成エラー:', error);
+        
+        // 詳細なエラー情報をモーダルで表示
+        const errorModal = showErrorModal(
+            'ステップ生成に失敗しました',
+            'シミュレーションの生成中にエラーが発生しました。ネットワーク接続を確認して再試行してください。',
+            error.message
+        );
+        
+        // 再試行ボタンを表示
+        const retryBtn = errorModal.querySelector('.error-modal-retry');
+        retryBtn.style.display = 'inline-block';
+        retryBtn.addEventListener('click', () => {
+            errorModal.remove();
+            startStep(stepNumber); // 同じステップを再試行
+        });
+        
         displayError(error.message, document.getElementById('chat-output'));
         
         // ボタンを再有効化
@@ -410,6 +604,9 @@ function completeStep(stepNumber) {
         endMessage.innerHTML = '<h3>🎉 会議が終了しました</h3><p>お疲れさまでした。</p>';
         chatOutput.appendChild(endMessage);
         
+        // 会議ログを保存
+        saveMeetingLog();
+        
         // 再生成ボタンを表示
         regenerateContainer.style.display = 'block';
     }
@@ -468,6 +665,90 @@ if (regenerateBtn) {
     });
 } else {
     console.error("Error: Regenerate button not found!");
+}
+
+// AI要約・提案ボタンのイベントリスナー
+if (generateSummaryBtn) {
+    generateSummaryBtn.addEventListener('click', async function() {
+        if (!lastFormData || !meetingLog) {
+            console.error('会議データが不足しています');
+            return;
+        }
+
+        // ボタンを無効化
+        generateSummaryBtn.disabled = true;
+        generateSummaryBtn.textContent = '生成中...';
+        
+        try {
+            const response = await callApiWithRetry(window.location.origin + '/api/generate-summary', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    formData: lastFormData,
+                    meetingLog: meetingLog
+                }),
+            });
+
+            const data = await response.json();
+            
+            // 要約・提案を表示
+            displaySummary(data.summary);
+            
+        } catch (error) {
+            console.error('要約生成エラー:', error);
+            
+            // 詳細なエラー情報をモーダルで表示
+            const errorModal = showErrorModal(
+                'AI要約・提案の生成に失敗しました',
+                '要約の生成中にエラーが発生しました。ネットワーク接続を確認して再試行してください。',
+                error.message
+            );
+            
+            // 再試行ボタンを表示
+            const retryBtn = errorModal.querySelector('.error-modal-retry');
+            retryBtn.style.display = 'inline-block';
+            retryBtn.addEventListener('click', () => {
+                errorModal.remove();
+                generateSummaryBtn.click(); // 要約生成を再試行
+            });
+            
+            summaryContainer.innerHTML = `<p style="color: red;">エラーが発生しました: ${error.message}</p>`;
+            summaryContainer.style.display = 'block';
+        } finally {
+            // ボタンを再有効化
+            generateSummaryBtn.disabled = false;
+            generateSummaryBtn.textContent = '🎆 AI要約・提案を生成';
+        }
+    });
+} else {
+    console.error("Error: Generate summary button not found!");
+}
+
+// 会議ログを保存する関数
+function saveMeetingLog() {
+    if (!currentStepData) return;
+    
+    meetingLog = currentStepData.map(step => {
+        return `${step.speaker}: ${step.text}`;
+    }).join('\n');
+    
+    console.log('会議ログを保存しました');
+}
+
+// AI要約・提案を表示する関数
+function displaySummary(summaryHtml) {
+    summaryContainer.innerHTML = `
+        <h3>📊 会議の結果要約 & ✨ 次のステップへの提案</h3>
+        ${summaryHtml}
+    `;
+    summaryContainer.style.display = 'block';
+    
+    // スムーズにスクロール
+    setTimeout(() => {
+        summaryContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
 }
 
 
