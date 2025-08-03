@@ -182,13 +182,13 @@ if (skipTypingBtn) {
 }
 
 // タイピングアニメーション関数
-async function typeMessage(speaker, message, container) {
+async function typeMessage(speaker, message, container, role = '') {
     return new Promise((resolve) => {
         isTyping = true;
         skipTyping = false;
         
         // タイピングインジケーターを表示
-        showTypingIndicator(speaker);
+        showTypingIndicator(speaker, role);
         
         // メッセージ要素を作成
         const messageDiv = document.createElement('div');
@@ -203,7 +203,7 @@ async function typeMessage(speaker, message, container) {
         
         const nameDiv = document.createElement('div');
         nameDiv.className = 'name';
-        nameDiv.textContent = speaker;
+        nameDiv.textContent = getDisplayName(speaker, role);
         
         const bubbleDiv = document.createElement('div');
         bubbleDiv.className = 'bubble';
@@ -249,9 +249,10 @@ async function typeMessage(speaker, message, container) {
 }
 
 // タイピングインジケーターを表示
-function showTypingIndicator(speaker) {
+function showTypingIndicator(speaker, role = '') {
     if (typingIndicator && typingSpeaker) {
-        typingSpeaker.textContent = `${speaker}が入力中`;
+        const displayName = getDisplayName(speaker, role);
+        typingSpeaker.textContent = `${displayName}が入力中`;
         typingIndicator.classList.add('show');
         typingIndicator.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
@@ -264,7 +265,83 @@ function hideTypingIndicator() {
     }
 }
 
-// 発言者名からアイコンクラスを生成するヘルパー関数
+// 役割からアイコンと短縮表示を取得するマッピング
+const roleMapping = {
+    // 進行役・コーディネーター
+    '就労選択支援員': { icon: '👨‍💼', shortRole: '進行役' },
+    '進行役': { icon: '👨‍💼', shortRole: '進行役' },
+    'コーディネーター': { icon: '👨‍💼', shortRole: '進行役' },
+    
+    // 本人・家族
+    '本人': { icon: '👦', shortRole: '本人' },
+    '父': { icon: '👨', shortRole: '父' },
+    '母': { icon: '👩', shortRole: '母' },
+    '保護者': { icon: '👨‍👩‍👧‍👦', shortRole: '保護者' },
+    
+    // 教育関係
+    '教員': { icon: '👩‍🏫', shortRole: '教員' },
+    '特別支援学校教員': { icon: '👩‍🏫', shortRole: '教員' },
+    '学校教員': { icon: '👩‍🏫', shortRole: '教員' },
+    '担任': { icon: '👩‍🏫', shortRole: '担任' },
+    
+    // 就労支援事業所
+    '就労継続支援B型事業所': { icon: '👥', shortRole: 'B型' },
+    'B型事業所': { icon: '👥', shortRole: 'B型' },
+    '就労継続B型': { icon: '👥', shortRole: 'B型' },
+    '就労移行支援事業所': { icon: '🏢', shortRole: '移行' },
+    '移行支援': { icon: '🏢', shortRole: '移行' },
+    '就労移行': { icon: '🏢', shortRole: '移行' },
+    
+    // 相談支援・専門機関
+    '相談支援専門員': { icon: '💼', shortRole: '相談' },
+    '相談員': { icon: '💼', shortRole: '相談' },
+    '障害者就業・生活支援センター': { icon: '🏛️', shortRole: 'センター' },
+    'センター': { icon: '🏛️', shortRole: 'センター' },
+    '支援センター': { icon: '🏛️', shortRole: 'センター' },
+    
+    // その他
+    '医療機関': { icon: '⚕️', shortRole: '医療' },
+    '医師': { icon: '👨‍⚕️', shortRole: '医師' },
+    '臨床心理士': { icon: '🧠', shortRole: '心理' },
+    'ソーシャルワーカー': { icon: '🤝', shortRole: 'SW' },
+    
+    // デフォルト
+    'default': { icon: '👤', shortRole: '' }
+};
+
+// 役割からアイコンと短縮表示を取得
+function getRoleInfo(role) {
+    if (!role) return roleMapping['default'];
+    
+    // 完全一致を優先
+    for (const [key, value] of Object.entries(roleMapping)) {
+        if (role === key) return value;
+    }
+    
+    // 部分一致
+    for (const [key, value] of Object.entries(roleMapping)) {
+        if (role.includes(key) || key.includes(role)) return value;
+    }
+    
+    return roleMapping['default'];
+}
+
+// 発言者名と役割から表示名を生成
+function getDisplayName(speakerName, role) {
+    const roleInfo = getRoleInfo(role);
+    
+    // 名前のクリーンアップ（既存の括弧内情報を削除）
+    const cleanName = speakerName.replace(/（.*?）|\(.*?\)/g, '').trim();
+    
+    // アイコン + 名前 + 短縮役割
+    if (roleInfo.shortRole) {
+        return `${roleInfo.icon} ${cleanName}（${roleInfo.shortRole}）`;
+    } else {
+        return `${roleInfo.icon} ${cleanName}`;
+    }
+}
+
+// 発言者名からアイコンクラスを生成するヘルパー関数（既存のCSS用）
 function getIconClass(speakerName) {
     // 既存のクラス名を優先的にチェック
     if (speakerName.includes("田中")) return "tanaka";
@@ -356,7 +433,7 @@ function showErrorModal(title, message, details = null) {
 async function displayMessagesWithTyping(messages, container) {
     for (const message of messages) {
         if (message.speaker && message.text) {
-            await typeMessage(message.speaker, message.text, container);
+            await typeMessage(message.speaker, message.text, container, message.role || '');
             // メッセージ間に少し間隔をあける
             await new Promise(resolve => setTimeout(resolve, 800));
         }
@@ -902,7 +979,7 @@ function displaySimulationResult(result, container) {
 
                const nameDiv = document.createElement('div');
                nameDiv.className = 'name';
-               nameDiv.textContent = item.role ? `${item.speaker}（${item.role}）` : item.speaker;
+               nameDiv.textContent = getDisplayName(item.speaker, item.role || '');
 
                const bubbleDiv = document.createElement('div');
                bubbleDiv.className = 'bubble';
