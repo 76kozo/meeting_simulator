@@ -170,7 +170,7 @@ ${participantListWithRoles}
 # シミュレーション開始:
 `;
 
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
         const requestBody = {
             contents: [{ parts: [{ "text": prompt }] }]
         };
@@ -261,7 +261,7 @@ app.post('/api/generate-summary', async (req, res) => {
         // AI要約・提案用プロンプトを生成
         const summaryPrompt = generateSummaryPrompt(formData, meetingLog);
 
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
         const requestBody = {
             contents: [{ parts: [{ "text": summaryPrompt }] }]
         };
@@ -340,7 +340,7 @@ app.post('/api/generate-step', async (req, res) => {
         // ステップ別のプロンプトを生成
         const stepPrompt = generateStepPrompt(stepNumber, formData, previousSteps);
 
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
         const requestBody = {
             contents: [{ parts: [{ "text": stepPrompt }] }]
         };
