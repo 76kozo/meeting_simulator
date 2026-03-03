@@ -1,5 +1,40 @@
 # ChangeLog
 
+## 2026-03-03 - Firebase移行・セキュリティ強化・バリデーション修正
+
+### 変更1: Vercel → Firebase 移行
+
+#### 概要
+デプロイ基盤をVercelからFirebase Hosting + Cloud Functions（asia-northeast1）に移行。
+
+#### 変更内容
+- `functions/index.js`: `server.js` の全ロジックをCloud Functionsに移植
+- `functions/package.json`: Cloud Functions用の依存関係を定義
+- `firebase.json`: Hosting + Functions設定（全リクエストをFunctionsにリライト）
+- `hosting_empty/`: 空ディレクトリ（Hostingの静的ファイル配信を無効化）
+- `.gitignore`: Firebase関連のパターンに更新
+- 削除: `vercel.json`, `server.js`, `.vercel/`
+
+#### セキュリティ
+- Firebase Secretsで`GEMINI_API_KEY`と`ADMIN_PASSWORD`を管理
+- 全リクエストをCloud Functions経由にルーティングし、Basic認証を全ページに適用
+- Express `trust proxy` を有効化（Cloud Run リバースプロキシ対応）
+- レート制限の`validate: false`設定（Cloud Functions環境対応）
+- リファラーチェックをFirebase Hostingドメイン対応に修正
+
+### 変更2: 制度検証バリデーションの誤検出修正
+
+#### 問題
+「特別支援学校高等部**3年生**」（学年）と「就労**移行**支援事業所 職員」（参加者名）の組み合わせが、「移行支援を3年利用する提案」と誤判定されていた。
+
+#### 修正内容
+- `validateSimulationContent()` を文脈考慮版に全面改修
+  - 文全体ではなく**文単位**で分割し、同一文内での文脈を考慮したパターンマッチに変更
+  - 「3年生」「3年度」等の学年・一般表現を正規表現で除外
+  - 年齢制限チェックもB型利用の文脈（利用/通所/入所等）がある場合のみ検出
+- ステップ1〜3（開会・報告・確認）ではバリデーションをスキップ
+- ステップ4〜6（情報共有・意見交換・方針確認）でのみ実行
+
 ## 2026-02-02 - Gemini APIモデル更新・Vercelデプロイ修正
 
 ### 問題

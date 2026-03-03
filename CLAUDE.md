@@ -4,13 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 開発コマンド
 
-- **サーバー起動**: `npm start` (`node server.js`を実行)
-- **開発時**: `node server.js` でローカル開発 (ポート3000)
-- **テストなし**: テストフレームワークは未設定 (`npm test`はエラーを返す)
+- **ローカル起動**: `firebase emulators:start --only hosting,functions`
+- **デプロイ**: `firebase deploy --project meeting-simulator-app`
+- **Functionsのみデプロイ**: `firebase deploy --only functions --project meeting-simulator-app`
+- **テストなし**: テストフレームワークは未設定
 
 ## アーキテクチャ概要
 
-これは**多機関連携会議シミュレーター**で、障害者の就労支援における多機関連携会議のAI生成シミュレーションを行うWebアプリケーションです。段階的進行とタイピングアニメーションにより、まるで実際の会議を見ているような臨場感ある体験を提供します。Gemini 2.0 Flash APIを使用して、各種関係者間の現実的な会議対話を生成します。
+これは**多機関連携会議シミュレーター**で、障害者の就労支援における多機関連携会議のAI生成シミュレーションを行うWebアプリケーションです。段階的進行とタイピングアニメーションにより、まるで実際の会議を見ているような臨場感ある体験を提供します。Gemini 2.5 Flash APIを使用して、各種関係者間の現実的な会議対話を生成します。
 
 ### プロジェクト成熟度
 
@@ -21,20 +22,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 継続的な機能拡張が可能な安定基盤
 
 ### 🌐 本番環境
-- **URL**: https://meeting-simulator-qs5a8uz35-76kozos-projects.vercel.app
+- **URL**: https://meeting-simulator-app.web.app
 - **認証**: Basic認証（admin/パスワード）
-- **最新デプロイ**: 2025年8月3日（制度準拠性向上: AI要約機能修正）
+- **ホスティング**: Firebase Hosting + Cloud Functions（asia-northeast1）
 - **ステータス**: ✅ Ready（稼働中）
 
 ### 主要コンポーネント
 
-**バックエンド (server.js)**:
+**バックエンド (functions/index.js)**:
 - Express.jsサーバーとBasic認証 (admin/password)
+- Cloud Functions + Firebase Secretsによるセキュアな環境変数管理
 - レート制限 (`/api/`ルートで15分間に50リクエスト)
 - API セキュリティのためのリファラーチェック
 - **段階別API**: `POST /api/generate-step` - ステップ別の短時間シミュレーション生成
 - 従来API: `POST /api/generate-simulation` - 一括シミュレーション生成（レガシー）
-- 環境変数: `GEMINI_API_KEY`, `ADMIN_PASSWORD`, `PORT`, `ALLOWED_ORIGIN`
+- シークレット: `GEMINI_API_KEY`, `ADMIN_PASSWORD`（Firebase Secrets）
 
 **フロントエンド (public/ ディレクトリ)**:
 - バニラ HTML/CSS/JavaScript (フレームワークなし)
@@ -72,7 +74,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 6. **セキュリティ**: Basic認証、レート制限、リファラーチェック
 
-7. **デプロイ対応**: Vercelデプロイメント設定（リージョンとタイムアウト設定）
+7. **Firebase Hosting + Cloud Functions**: Firebaseデプロイメント設定（全リクエストFunctionsリライト）
 
 8. **設定選択機能**: ケースタイプ、アセスメント手法、目標設定パターンなどの詳細設定
 
@@ -123,8 +125,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **リファラーチェック**: 直接API アクセス防止
 
 ### ✅ デプロイメント（完全実装済み）
-- **Vercel対応**: プロダクション環境での安定動作
-- **環境変数管理**: セキュアな設定管理
+- **Firebase対応**: Firebase Hosting + Cloud Functionsでの安定動作
+- **Firebase Secrets管理**: セキュアな設定管理
 - **パフォーマンス最適化**: 30秒/ステップの高速処理
 
 ### API連携

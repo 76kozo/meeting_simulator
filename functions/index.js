@@ -1,77 +1,87 @@
-// server.js 実行開始ログ
-console.log("Starting server.js...");
-require('dotenv').config(); // .envファイルから環境変数を読み込む
-console.log(".env loaded.");
+// functions/index.js
+// 多機関連携会議シミュレーター - Cloud Functions バックエンド
+// server.js からの移植版（Express.js on Cloud Functions）
+
+const { onRequest } = require("firebase-functions/v2/https");
+const { defineSecret } = require("firebase-functions/params");
 const express = require('express');
-console.log("Express loaded.");
 const cors = require('cors');
-console.log("CORS loaded.");
-const path = require('path');
 const basicAuth = require('express-basic-auth');
 const rateLimit = require('express-rate-limit');
 
+// Firebase定義のシークレット
+const geminiApiKey = defineSecret("GEMINI_API_KEY");
+const adminPassword = defineSecret("ADMIN_PASSWORD");
+
 const app = express();
-const port = process.env.PORT || 3000;
 
-// Basic認証の設定
-const users = {
-    'admin': process.env.ADMIN_PASSWORD || 'default_password'
-};
+// Cloud Functions はリバースプロキシ経由のため trust proxy を有効化
+app.set('trust proxy', true);
 
-const auth = basicAuth({
-    users,
-    challenge: true,
-    realm: 'Meeting Simulator'
+// Basic認証の設定（シークレットから取得）
+app.use((req, res, next) => {
+    const password = adminPassword.value();
+    const auth = basicAuth({
+        users: { 'admin': password || 'default_password' },
+        challenge: true,
+        realm: 'Meeting Simulator'
+    });
+    auth(req, res, next);
 });
 
-// すべてのルートにBasic認証を適用
-app.use(auth);
-
-// レート制限の設定
+// レート制限の設定（Cloud Functions環境用に調整）
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15分
-    max: 50 // 15分あたり50リクエストまで
+    max: 50, // 15分あたり50リクエストまで
+    validate: false // Cloud Functions環境ではX-Forwarded-Forの検証を無効化
 });
 
 app.use('/api/', limiter);
 
-// リファラーチェック
+// リファラーチェック（Cloud Functions環境対応）
 app.use((req, res, next) => {
-    const referer = req.get('Referer');
-    if (req.path.startsWith('/api/') && (!referer || !referer.includes(req.get('host')))) {
-        return res.status(403).json({ error: '不正なアクセスです' });
+    if (req.path.startsWith('/api/')) {
+        const referer = req.get('Referer') || '';
+        const host = req.get('host') || '';
+        // Firebase HostingドメインまたはCloud Functions URLからのリクエストを許可
+        const allowedDomains = [
+            'meeting-simulator-app.web.app',
+            'meeting-simulator-app.firebaseapp.com',
+            host
+        ];
+        const isAllowed = allowedDomains.some(domain => referer.includes(domain));
+        if (!referer || !isAllowed) {
+            return res.status(403).json({ error: '不正なアクセスです' });
+        }
     }
     next();
 });
 
-// CORSミドルウェアを設定（API ルートの前に配置）
+// CORSミドルウェア
 app.use(cors({
-    origin: process.env.NODE_ENV === 'production'
-        ? process.env.ALLOWED_ORIGIN || false
-        : 'http://localhost:3000',
+    origin: true, // Firebase Hostingからのリクエストを許可
     credentials: true
 }));
 
-// 静的ファイルの提供
-app.use(express.static('public'));
+// 静的ファイルの配信（Basic認証の後に配置することで全ページに認証が適用される）
+const path = require('path');
+app.use(express.static(path.join(__dirname, 'public')));
 
 // ルートパスのハンドリング
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// JSONリクエストボディを解析するためのミドルウェア
+// JSONリクエストボディを解析
 app.use(express.json());
 
-// Gemini APIキーを環境変数から取得
-const apiKey = process.env.GEMINI_API_KEY;
+// ====================
+// APIエンドポイント
+// ====================
 
-if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
-    console.error("エラー: GEMINI_API_KEY が .env ファイルに設定されていません。");
-}
-
-// フロントエンドからのシミュレーションリクエストを処理するエンドポイント
+// フロントエンドからのシミュレーションリクエストを処理するエンドポイント（レガシー）
 app.post('/api/generate-simulation', async (req, res) => {
+    const apiKey = geminiApiKey.value();
     if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
         return res.status(500).json({ error: 'サーバー側でAPIキーが設定されていません。' });
     }
@@ -94,10 +104,10 @@ app.post('/api/generate-simulation', async (req, res) => {
             '保護者': '家庭での本人の様子や将来への希望、不安を伝え、支援方針に対する意向を表明する視点を持つ。',
             '本人': '自分の希望や気持ちを積極的に表現し、質問に対して具体的に答える。実習や作業で感じたこと、好きな作業、苦手なこと、将来の希望など、自分の意見をしっかりと伝える。ただし、答えに詰まった場合は、支援者からの丁寧な質問で引き出してもらう。'
         };
-        
+
         // カスタムロール設定があれば使用、なければデフォルトを使用
-        const roleDescriptions = (settings && settings.customRoles && Object.keys(settings.customRoles).length > 0) 
-            ? settings.customRoles 
+        const roleDescriptions = (settings && settings.customRoles && Object.keys(settings.customRoles).length > 0)
+            ? settings.customRoles
             : defaultRoleDescriptions;
 
         const participantListWithRoles = participants.map(p => {
@@ -207,9 +217,9 @@ ${participantListWithRoles}
             // 生成内容の制度的妥当性を検証
             const violations = validateSimulationContent(generatedText);
             const validationWarning = generateValidationWarning(violations);
-            
+
             // 検証結果を含めてレスポンス
-            const response = { 
+            const response = {
                 simulation: generatedText,
                 validation: {
                     violations: violations,
@@ -222,7 +232,7 @@ ${participantListWithRoles}
             console.error('APIリクエストエラー:', error);
             let statusCode = 500;
             let errorMessage = 'サーバー内部でエラーが発生しました。';
-            
+
             if (error.name === 'AbortError') {
                 statusCode = 504;
                 errorMessage = 'リクエストがタイムアウトしました。しばらく時間をおいて再度お試しください。';
@@ -230,23 +240,24 @@ ${participantListWithRoles}
                 statusCode = 502;
                 errorMessage = 'APIサービスとの通信に問題が発生しました。';
             }
-            
-            res.status(statusCode).json({ 
+
+            res.status(statusCode).json({
                 error: errorMessage,
-                details: error.message 
+                details: error.message
             });
         }
     } catch (error) {
         console.error('サーバーエラー:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: 'サーバー内部でエラーが発生しました。',
-            details: error.message 
+            details: error.message
         });
     }
 });
 
 // AI要約・提案生成エンドポイント
 app.post('/api/generate-summary', async (req, res) => {
+    const apiKey = geminiApiKey.value();
     if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
         return res.status(500).json({ error: 'サーバー側でAPIキーが設定されていません。' });
     }
@@ -300,7 +311,7 @@ app.post('/api/generate-summary', async (req, res) => {
             console.error('APIリクエストエラー:', error);
             let statusCode = 500;
             let errorMessage = 'サーバー内部でエラーが発生しました。';
-            
+
             if (error.name === 'AbortError') {
                 statusCode = 504;
                 errorMessage = 'リクエストがタイムアウトしました。しばらく時間をおいて再度お試しください。';
@@ -308,23 +319,24 @@ app.post('/api/generate-summary', async (req, res) => {
                 statusCode = 502;
                 errorMessage = 'APIサービスとの通信に問題が発生しました。';
             }
-            
-            res.status(statusCode).json({ 
+
+            res.status(statusCode).json({
                 error: errorMessage,
-                details: error.message 
+                details: error.message
             });
         }
     } catch (error) {
         console.error('サーバーエラー:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: 'サーバー内部でエラーが発生しました。',
-            details: error.message 
+            details: error.message
         });
     }
 });
 
 // 段階別シミュレーション生成エンドポイント
 app.post('/api/generate-step', async (req, res) => {
+    const apiKey = geminiApiKey.value();
     if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
         return res.status(500).json({ error: 'サーバー側でAPIキーが設定されていません。' });
     }
@@ -348,7 +360,7 @@ app.post('/api/generate-step', async (req, res) => {
         console.log(`ステップ${stepNumber}のGemini APIリクエスト:`, JSON.stringify(requestBody, null, 2));
 
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30000); // 30秒でタイムアウト（短縮）
+        const timeout = setTimeout(() => controller.abort(), 30000); // 30秒でタイムアウト
 
         try {
             const apiResponse = await fetch(apiUrl, {
@@ -374,12 +386,17 @@ app.post('/api/generate-step', async (req, res) => {
                 throw new Error('APIから有効なテキストが返されませんでした。');
             }
 
-            // 生成内容の制度的妥当性を検証
-            const violations = validateSimulationContent(generatedText);
-            const validationWarning = generateValidationWarning(violations);
-            
+            // 生成内容の制度的妥当性を検証（ステップ4以降のみ）
+            // ステップ1〜3（開会・報告・確認）は自己紹介や報告が中心で誤検出が多いためスキップ
+            let violations = [];
+            let validationWarning = null;
+            if (stepNumber >= 4) {
+                violations = validateSimulationContent(generatedText);
+                validationWarning = generateValidationWarning(violations);
+            }
+
             // 検証結果を含めてレスポンス
-            const response = { 
+            const response = {
                 simulation: generatedText,
                 validation: {
                     violations: violations,
@@ -392,7 +409,7 @@ app.post('/api/generate-step', async (req, res) => {
             console.error('APIリクエストエラー:', error);
             let statusCode = 500;
             let errorMessage = 'サーバー内部でエラーが発生しました。';
-            
+
             if (error.name === 'AbortError') {
                 statusCode = 504;
                 errorMessage = 'リクエストがタイムアウトしました。しばらく時間をおいて再度お試しください。';
@@ -400,25 +417,29 @@ app.post('/api/generate-step', async (req, res) => {
                 statusCode = 502;
                 errorMessage = 'APIサービスとの通信に問題が発生しました。';
             }
-            
-            res.status(statusCode).json({ 
+
+            res.status(statusCode).json({
                 error: errorMessage,
-                details: error.message 
+                details: error.message
             });
         }
     } catch (error) {
         console.error('サーバーエラー:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: 'サーバー内部でエラーが発生しました。',
-            details: error.message 
+            details: error.message
         });
     }
 });
 
+// ====================
+// ヘルパー関数
+// ====================
+
 // ステップ別プロンプト生成関数
 function generateStepPrompt(stepNumber, formData, previousSteps) {
     const { basicInfo, assessmentSummary, observationPoints, participants } = formData;
-    
+
     // デフォルトのロール説明（フロントエンドのdefaultRolesと同期）
     const defaultRoleDescriptions = {
         '就労選択支援員': 'アセスメント結果を客観的に報告し、会議全体の進行を担当し、各参加者の意見を引き出し、中立的な立場から支援方針をまとめる視点を持つ。特に本人の意見を丁寧に聞き出すことを心がける。',
@@ -430,10 +451,10 @@ function generateStepPrompt(stepNumber, formData, previousSteps) {
         '保護者': '家庭での本人の様子や将来への希望、不安を伝え、支援方針に対する意向を表明する視点を持つ。',
         '本人': '自分の希望や気持ちを積極的に表現し、質問に対して具体的に答える。実習や作業で感じたこと、好きな作業、苦手なこと、将来の希望など、自分の意見をしっかりと伝える。ただし、答えに詰まった場合は、支援者からの丁寧な質問で引き出してもらう。'
     };
-    
+
     // カスタムロール設定があれば使用、なければデフォルトを使用
-    const roleDescriptions = (formData.settings && formData.settings.customRoles && Object.keys(formData.settings.customRoles).length > 0) 
-        ? formData.settings.customRoles 
+    const roleDescriptions = (formData.settings && formData.settings.customRoles && Object.keys(formData.settings.customRoles).length > 0)
+        ? formData.settings.customRoles
         : defaultRoleDescriptions;
 
     const participantListWithRoles = participants.map(p => {
@@ -495,7 +516,7 @@ function generateStepPrompt(stepNumber, formData, previousSteps) {
     };
 
     const currentStepInfo = stepSettings[stepNumber];
-    const previousContext = previousSteps.length > 0 ? 
+    const previousContext = previousSteps.length > 0 ?
         `\n\n## これまでの会議の流れ\n${previousSteps.map(step => `${step.speaker}: ${step.text}`).join('\n')}` : '';
 
     let basePrompt = `
@@ -522,7 +543,7 @@ ${previousContext}`;
     if (formData.settings) {
         basePrompt += enhancePromptWithSettings(formData.settings);
     }
-    
+
     basePrompt += `
 
 ## 出力指示
@@ -616,10 +637,10 @@ function getConstraintsPrompt() {
 // 設定に基づくプロンプト拡張関数
 function enhancePromptWithSettings(settings) {
     let enhancement = '';
-    
+
     // 制度制約情報を最初に追加
     enhancement += getConstraintsPrompt();
-    
+
     // 発言文字数の指示を追加
     if (settings.speechLength) {
         const speechLengthInstructions = {
@@ -631,22 +652,22 @@ function enhancePromptWithSettings(settings) {
         };
         enhancement += `\n\n### 発言の長さ指示\n${speechLengthInstructions[settings.speechLength]}\n`;
     }
-    
+
     // 事前アセスメント情報の追加
     if (settings.assessments && settings.assessments.length > 0) {
         const assessmentTexts = {
             'work-observation': '作業観察結果が詳細に実施されている',
-            'aptitude-test': '適性検査による客観的データがある', 
+            'aptitude-test': '適性検査による客観的データがある',
             'interview-result': '本人面談による意向確認が行われている',
             'school-report': '学校からの詳細な情報提供がある',
             'family-interview': '家族面談による家庭状況の把握ができている',
             'medical-info': '医療機関からの専門的な情報がある'
         };
-        
+
         const selectedAssessments = settings.assessments.map(a => assessmentTexts[a]).join('、');
         enhancement += `\n\n### 利用可能な事前アセスメント情報\n${selectedAssessments}\n`;
     }
-    
+
     // ゴールパスに応じた指示
     const goalInstructions = {
         'consensus': '参加者全員の合意形成を重視し、異なる意見を調整しながら進めてください。',
@@ -654,14 +675,14 @@ function enhancePromptWithSettings(settings) {
         'empowerment': '本人の自己決定と主体性を最重視し、本人の発言を中心に据えてください。'
     };
     enhancement += `\n### 会議のゴール設定\n${goalInstructions[settings.goalPath]}\n`;
-    
+
     // 進行パターンの指示
     const progressInstructions = {
         'structured': 'あらかじめ決められた議題に沿って、段階的に構造化して進行してください。',
         'flexible': '参加者の発言や状況に応じて、柔軟で自然な流れで進行してください。'
     };
     enhancement += `\n### 進行方針\n${progressInstructions[settings.progressPattern]}\n`;
-    
+
     // 専門性の強調
     const expertiseInstructions = {
         'balanced': '各専門職の視点をバランス良く取り入れながら進めてください。',
@@ -669,101 +690,106 @@ function enhancePromptWithSettings(settings) {
         'person-centered': '専門的視点よりも本人中心の考え方を最優先に進めてください。'
     };
     enhancement += `\n### 専門性の活用方針\n${expertiseInstructions[settings.expertise]}\n`;
-    
+
     return enhancement;
 }
 
-// 事実確認用プロンプト生成関数
-function generateFactCheckPrompt(generatedContent) {
-    return `
-生成された会議内容について、障害福祉制度の正確性を確認してください。
-
-【確認対象の内容】
-${generatedContent}
-
-【チェック項目】
-1. 就労継続支援B型と就労移行支援の同時利用・併用・隔日利用について言及がないか
-2. 18歳未満のB型利用について間違った記述がないか
-3. 就労移行支援の利用期間について正確な記述になっているか
-4. サービス等利用計画や市町村支給決定について適切に言及されているか
-
-【指示】
-もし制度上不適切な内容が含まれている場合は、該当部分を指摘し、正しい内容に修正した会議ログを出力してください。
-制度的に問題がない場合は「制度確認完了：問題なし」と回答してください。`;
-}
-
-// 自動検証機能：生成内容の制度的妥当性をチェック
+// 自動検証機能：生成内容の制度的妥当性をチェック（文脈考慮版）
 function validateSimulationContent(generatedText) {
     const violations = [];
-    const normalizedText = generatedText.toLowerCase();
-    
-    // B型と移行支援の同時利用チェック
-    const hasB型 = normalizedText.includes('b型') || normalizedText.includes('継続支援');
-    const has移行 = normalizedText.includes('移行支援') || normalizedText.includes('移行');
-    
-    if (hasB型 && has移行) {
-        const problematicPatterns = [
-            '隔日', '併用', '同時利用', '並行', '組み合わせ', 
-            'b型も移行も', '移行もb型も', 'どちらも利用'
-        ];
-        
-        for (const pattern of problematicPatterns) {
-            if (normalizedText.includes(pattern)) {
-                violations.push({
-                    type: 'serviceRestriction',
-                    message: 'B型と移行支援の同時利用は認められていません',
-                    pattern: pattern,
-                    severity: 'high'
-                });
-                break;
+    // 文単位で分割して文脈を考慮した検証を行う
+    const sentences = generatedText.split(/[。！？\n]/).filter(s => s.trim());
+
+    // B型と移行支援の同時利用チェック（同一文内での提案文脈に限定）
+    for (const sentence of sentences) {
+        const s = sentence.toLowerCase();
+        const hasB型InSentence = s.includes('b型') || s.includes('就労継続支援');
+        const has移行InSentence = s.includes('移行支援') || s.includes('就労移行');
+
+        if (hasB型InSentence && has移行InSentence) {
+            const problematicPatterns = [
+                '隔日', '併用', '同時利用', '同時に', '並行', '組み合わせ',
+                'b型も移行も', '移行もb型も', 'どちらも利用', '両方'
+            ];
+            for (const pattern of problematicPatterns) {
+                if (s.includes(pattern)) {
+                    violations.push({
+                        type: 'serviceRestriction',
+                        message: 'B型と移行支援の同時利用は認められていません',
+                        pattern: pattern,
+                        severity: 'high'
+                    });
+                    break;
+                }
             }
         }
     }
-    
-    // 18歳未満のB型利用チェック
-    if (hasB型) {
-        const agePatterns = ['17歳', '16歳', '15歳', '14歳', '高校生でb型', '未成年でb型'];
-        for (const pattern of agePatterns) {
-            if (normalizedText.includes(pattern)) {
-                violations.push({
-                    type: 'ageRestriction',
-                    message: '18歳未満はB型事業所を利用できません',
-                    pattern: pattern,
-                    severity: 'high'
-                });
-                break;
+
+    // 18歳未満のB型利用チェック（B型利用の文脈に限定）
+    for (const sentence of sentences) {
+        const s = sentence.toLowerCase();
+        if (s.includes('b型') || s.includes('就労継続支援')) {
+            // 年齢が同一文内でB型利用の文脈にある場合のみ
+            const ageMatch = s.match(/(1[4-7])歳/);
+            if (ageMatch) {
+                const utilizePatterns = ['利用', '通う', '通所', '入所', '開始', 'できる'];
+                const hasUtilizeContext = utilizePatterns.some(p => s.includes(p));
+                if (hasUtilizeContext) {
+                    violations.push({
+                        type: 'ageRestriction',
+                        message: '18歳未満はB型事業所を利用できません',
+                        pattern: `${ageMatch[1]}歳`,
+                        severity: 'high'
+                    });
+                    break;
+                }
             }
         }
     }
-    
-    // 移行支援の期間チェック
-    if (has移行) {
-        const incorrectPeriods = ['3年', '4年', '5年', '無期限', '期限なし'];
-        for (const period of incorrectPeriods) {
-            if (normalizedText.includes(period) && normalizedText.includes('移行')) {
-                violations.push({
-                    type: 'usagePeriod',
-                    message: '移行支援の利用期間は原則2年（延長1年）です',
-                    pattern: period,
-                    severity: 'medium'
-                });
-                break;
+
+    // 移行支援の期間チェック（文脈を考慮し、学年表現を除外）
+    for (const sentence of sentences) {
+        const s = sentence.toLowerCase();
+        // 「移行支援」が文中に含まれる場合のみチェック
+        if (s.includes('移行支援') || s.includes('就労移行')) {
+            // 誤った期間の提案をチェック（「3年生」「3年間の教育」等の学年・一般表現を除外）
+            const periodPatterns = [
+                { regex: /([3-9])年(?!生|次|度|目|間の[教学勉])/, label: '年' },
+                { regex: /無期限/, label: '無期限' },
+                { regex: /期限なし/, label: '期限なし' }
+            ];
+            for (const { regex, label } of periodPatterns) {
+                const match = s.match(regex);
+                if (match) {
+                    // 利用期間の文脈かどうかを追加確認
+                    const periodContextPatterns = ['利用', '期間', '延長', '継続', '通える', '使える'];
+                    const hasPeriodContext = periodContextPatterns.some(p => s.includes(p));
+                    if (hasPeriodContext) {
+                        violations.push({
+                            type: 'usagePeriod',
+                            message: '移行支援の利用期間は原則2年（延長1年）です',
+                            pattern: match[0],
+                            severity: 'medium'
+                        });
+                        break;
+                    }
+                }
             }
         }
     }
-    
+
     return violations;
 }
 
 // 検証結果に基づいて警告を生成
 function generateValidationWarning(violations) {
     if (violations.length === 0) return null;
-    
+
     const highSeverityViolations = violations.filter(v => v.severity === 'high');
     const mediumSeverityViolations = violations.filter(v => v.severity === 'medium');
-    
+
     let warning = '⚠️ 制度上の問題が検出されました:\n\n';
-    
+
     if (highSeverityViolations.length > 0) {
         warning += '【重要な問題】\n';
         highSeverityViolations.forEach(v => {
@@ -771,23 +797,23 @@ function generateValidationWarning(violations) {
         });
         warning += '\n';
     }
-    
+
     if (mediumSeverityViolations.length > 0) {
         warning += '【注意事項】\n';
         mediumSeverityViolations.forEach(v => {
             warning += `- ${v.message}\n`;
         });
     }
-    
+
     warning += '\n※ この内容は参考情報として生成されました。実際の制度運用については、最新の法令・通知を必ず確認してください。';
-    
+
     return warning;
 }
 
 // AI要約・提案用プロンプト生成関数
 function generateSummaryPrompt(formData, meetingLog) {
     const { basicInfo, assessmentSummary, observationPoints, participants } = formData;
-    
+
     return `
 あなたは経験豊富な障害福祉の専門家であり、多機関連携会議のファシリテーターです。
 以下の会議の会話ログを分析し、次の2つのタスクを実行してください。出力はHTML形式でお願いします。
@@ -816,11 +842,18 @@ ${meetingLog}
 `;
 }
 
-// 危険なAPIキー公開エンドポイントを削除
-// セキュリティ上の理由により、このエンドポイントは削除されました
+// ====================
+// Cloud Functions エクスポート
+// ====================
 
-// サーバー起動
-console.log(`Attempting to start server on port ${port}...`);
-app.listen(port, () => {
-    console.log(`プロキシサーバーが http://localhost:${port} で起動しました`);
-});
+// Express アプリを Cloud Functions としてエクスポート
+// タイムアウト: 120秒、メモリ: 512MB、リージョン: 東京
+exports.api = onRequest(
+    {
+        timeoutSeconds: 120,
+        memory: "512MiB",
+        region: "asia-northeast1",
+        secrets: [geminiApiKey, adminPassword]
+    },
+    app
+);

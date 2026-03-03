@@ -4,9 +4,9 @@
 
 ## 🌐 本番環境
 
-**URL**: https://meeting-simulator.vercel.app  
+**URL**: https://meeting-simulator-app.web.app  
 **認証**: Basic認証（admin/パスワード）  
-**最新デプロイ**: 2025年8月4日 00:27 JST  
+**ホスティング**: Firebase Hosting + Cloud Functions（asia-northeast1）  
 **ステータス**: ✅ Ready（稼働中）
 
 ## ✨ 主要機能
@@ -49,11 +49,11 @@
 ## 🛠️ 技術スタック
 
 - **フロントエンド**: バニラ HTML/CSS/JavaScript
-- **バックエンド**: Node.js + Express.js
-- **AI**: Google Gemini 2.0 Flash API
-- **デプロイ**: Vercel
-- **認証**: Basic認証
-- **セキュリティ**: レート制限、リファラーチェック
+- **バックエンド**: Node.js + Express.js（Cloud Functions）
+- **AI**: Google Gemini 2.5 Flash API
+- **ホスティング**: Firebase Hosting + Cloud Functions
+- **認証**: Basic認証（Firebase Secrets管理）
+- **セキュリティ**: レート制限、リファラーチェック、trust proxy
 
 ---
 
@@ -250,7 +250,8 @@
 ## 💻 ローカル開発
 
 ### 前提条件
-- Node.js (v14以上)
+- Node.js (v20以上)
+- Firebase CLI (`npm install -g firebase-tools`)
 - Google Gemini API キー
 
 ### インストール・起動
@@ -259,19 +260,31 @@
 git clone https://github.com/76kozo/meeting_simulator.git
 cd meeting_simulator
 
-# 依存関係をインストール
-npm install
+# Cloud Functions の依存関係をインストール
+cd functions && npm install && cd ..
 
-# 環境変数を設定（.envファイルを作成）
-GEMINI_API_KEY=your_api_key_here
-ADMIN_PASSWORD=your_password_here
-PORT=3000
-
-# サーバー起動
-npm start
+# Firebase エミュレータで起動
+firebase emulators:start --only hosting,functions
 ```
 
-ブラウザで `http://localhost:3000` にアクセス
+### 本番デプロイ
+```bash
+# 全体をデプロイ
+firebase deploy --project meeting-simulator-app
+
+# Functionsのみデプロイ
+firebase deploy --only functions --project meeting-simulator-app
+
+# Hostingのみデプロイ
+firebase deploy --only hosting --project meeting-simulator-app
+```
+
+### シークレット管理
+```bash
+# APIキーの設定・更新
+firebase functions:secrets:set GEMINI_API_KEY --project meeting-simulator-app
+firebase functions:secrets:set ADMIN_PASSWORD --project meeting-simulator-app
+```
 
 ---
 
@@ -279,15 +292,24 @@ npm start
 
 ```
 meeting_simulator/
-├── public/                 # フロントエンド
+├── functions/              # Cloud Functions バックエンド
+│   ├── index.js           # Express サーバー (API + 静的配信)
+│   ├── package.json       # バックエンド依存関係
+│   └── public/            # 静的ファイル（Functions内配信用）
+│       ├── index.html     # メインページ
+│       ├── script.js      # JavaScript処理
+│       ├── style.css      # スタイル
+│       └── testdata.json  # テストデータ
+├── public/                 # フロントエンド（開発参照用）
 │   ├── index.html         # メインページ
 │   ├── script.js          # JavaScript処理
 │   ├── style.css          # スタイル
 │   └── testdata.json      # テストデータ
-├── server.js              # Express サーバー
-├── vercel.json           # Vercel設定
-├── package.json          # 依存関係
-└── README.md             # このファイル
+├── hosting_empty/          # Hosting用空ディレクトリ
+├── firebase.json           # Firebase設定
+├── ChangeLog.md           # 変更履歴
+├── CLAUDE.md              # 開発ガイド
+└── README.md              # このファイル
 ```
 
 ---
